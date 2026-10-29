@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpieza UF - PTAP ZFCCC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg">
+            <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
+            <nav class="space-y-2 font-medium text-sm">
+                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Plan de Calidad</a>
+                <a href="/contadores" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Contadores 24h</a>
+                <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
+                <a href="/limpieza-uf" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Limpieza UF</a>
+                <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-y-auto p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-[#0b4f2f]">Módulo: Limpieza de Ultrafiltración (UF)</h2>
+                <button onclick="abrirModalUF()" class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2.5 rounded-lg font-semibold shadow">
+                    + Registrar Limpieza UF
+                </button>
+            </div>
+
+            <!-- Panel de Historial / Tabla -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
+                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Historial de Limpiezas UF</h3>
+                <div class="overflow-x-auto max-h-[500px]">
+                    <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
+                            <tr>
+                                <th class="p-2.5">Fecha</th>
+                                <th class="p-2.5">Equipo</th>
+                                <th class="p-2.5">Operador</th>
+                                <th class="p-2.5">Tipo Limpieza</th>
+                                <th class="p-2.5">H. Inicio</th>
+                                <th class="p-2.5">H. Final</th>
+                                <th class="p-2.5">Conc. 1</th>
+                                <th class="p-2.5">Conc. 2</th>
+                                <th class="p-2.5">Agua Ini.</th>
+                                <th class="p-2.5">Agua Fin.</th>
+                                <th class="p-2.5">Consumo (m³)</th>
+                                <th class="p-2.5">Turbied. (NTU)</th>
+                                <th class="p-2.5">pH Final</th>
+                                <th class="p-2.5">Observaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="body-tabla-uf" class="divide-y divide-gray-200">
+                            <tr><td colspan="14" class="p-4 text-center text-gray-500 italic">Cargando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Registrar Limpieza UF -->
+    <div id="modalUF" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 bg-[#0b3d2e] text-white rounded-t-xl flex justify-between items-center">
+                <h3 class="text-lg font-bold">🧪 Registrar Limpieza de Ultrafiltración (UF)</h3>
+                <button onclick="cerrarModalUF()" class="text-xl font-bold">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-4 text-sm flex-1">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold mb-1">Fecha:</label>
+                        <input type="date" id="uf_fecha" class="border rounded p-2 w-full">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Equipo:</label>
+                        <select id="uf_equipo" class="border rounded p-2 w-full">
+                            {% for eq in equipos %}
+                            <option value="{{ eq }}">{{ eq }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-1">Operador (Quien realiza):</label>
+                    <select id="uf_operador" class="border rounded p-2 w-full">
+                        {% for op in operadores %}
+                        <option value="{{ op }}">{{ op }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-bold mb-1">Tipo de Limpieza:</label>
+                        <select id="uf_tipo" class="border rounded p-2 w-full">
+                            <option value="Retrolavado">Retrolavado</option>
+                            <option value="CEB">CEB</option>
+                            <option value="Retrolavado y CEB">Retrolavado y CEB</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Hora Inicio:</label>
+                        <input type="time" id="uf_h_inicio" class="border rounded p-2 w-full">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Hora Final:</label>
+                        <input type="time" id="uf_h_final" class="border rounded p-2 w-full">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold mb-1">Concentración Solución 1 (1,5%):</label>
+                        <input type="text" id="uf_conc1" class="border rounded p-2 w-full" placeholder="Ej: 1.5%">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Concentración Solución 2 (1,5%):</label>
+                        <input type="text" id="uf_conc2" class="border rounded p-2 w-full" placeholder="Ej: 1.5%">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold mb-1">Contador de agua inicial (m³):</label>
+                        <input type="number" step="0.01" id="uf_agua_ini" class="border rounded p-2 w-full" value="0">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Contador de agua final (m³):</label>
+                        <input type="number" step="0.01" id="uf_agua_fin" class="border rounded p-2 w-full" value="0">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold mb-1">Turbiedad Puesta en Marcha (NTU):</label>
+                        <input type="text" id="uf_turbiedad" class="border rounded p-2 w-full" placeholder="Ej: 0.15">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">pH Final:</label>
+                        <input type="text" id="uf_ph" class="border rounded p-2 w-full" placeholder="Ej: 7.0">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold mb-1">Observaciones:</label>
+                    <textarea id="uf_obs" rows="3" class="border rounded p-2 w-full" placeholder="Observaciones adicionales..."></textarea>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                <button onclick="cerrarModalUF()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
+                <button onclick="guardarLimpiezaUF()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Limpieza UF</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const hoyStr = new Date().toISOString().split('T')[0];
+        document.getElementById('uf_fecha').value = hoyStr;
+
+        function abrirModalUF() {
+            document.getElementById('modalUF').classList.remove('hidden');
+            document.getElementById('modalUF').classList.add('flex');
+        }
+
+        function cerrarModalUF() {
+            document.getElementById('modalUF').classList.add('hidden');
+            document.getElementById('modalUF').classList.remove('flex');
+        }
+
+        async function cargarTablaUF() {
+            const res = await fetch('/api/limpieza-uf/registros');
+            const data = await res.json();
+            const tbody = document.getElementById('body-tabla-uf');
+            tbody.innerHTML = '';
+
+            if (!data.data || data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="14" class="p-4 text-center text-gray-500 italic">No hay registros de limpiezas UF guardados.</td></tr>';
+                return;
+            }
+
+            data.data.forEach(item => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-2.5 border-b font-medium">${item.fecha}</td>
+                        <td class="p-2.5 border-b">${item.equipo}</td>
+                        <td class="p-2.5 border-b">${item.operador}</td>
+                        <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
+                        <td class="p-2.5 border-b">${item.hora_inicio}</td>
+                        <td class="p-2.5 border-b">${item.hora_final}</td>
+                        <td class="p-2.5 border-b">${item.concentracion_1}</td>
+                        <td class="p-2.5 border-b">${item.concentracion_2}</td>
+                        <td class="p-2.5 border-b font-mono">${item.agua_inicial}</td>
+                        <td class="p-2.5 border-b font-mono">${item.agua_final}</td>
+                        <td class="p-2.5 border-b font-mono font-bold text-[#0b4f2f]">${item.consumo_agua}</td>
+                        <td class="p-2.5 border-b">${item.turbiedad}</td>
+                        <td class="p-2.5 border-b">${item.ph_final}</td>
+                        <td class="p-2.5 border-b">${item.observaciones}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function guardarLimpiezaUF() {
+            const payload = {
+                fecha: document.getElementById('uf_fecha').value,
+                equipo: document.getElementById('uf_equipo').value,
+                operador: document.getElementById('uf_operador').value,
+                tipo_limpieza: document.getElementById('uf_tipo').value,
+                hora_inicio: document.getElementById('uf_h_inicio').value,
+                hora_final: document.getElementById('uf_h_final').value,
+                concentracion_1: document.getElementById('uf_conc1').value,
+                concentracion_2: document.getElementById('uf_conc2').value,
+                agua_inicial: parseFloat(document.getElementById('uf_agua_ini').value) || 0,
+                agua_final: parseFloat(document.getElementById('uf_agua_fin').value) || 0,
+                turbiedad: document.getElementById('uf_turbiedad').value,
+                ph_final: document.getElementById('uf_ph').value,
+                observaciones: document.getElementById('uf_obs').value
+            };
+
+            const res = await fetch('/api/limpieza-uf/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                alert("¡Registro de Limpieza UF guardado con éxito y sincronizado con Excel!");
+                cerrarModalUF();
+                cargarTablaUF();
+            } else {
+                alert("Error al guardar el registro.");
+            }
+        }
+
+        cargarTablaUF();
+    </script>
+</body>
+</html>
