@@ -13,11 +13,11 @@
         <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg">
             <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
             <nav class="space-y-2 font-medium text-sm">
-                <a href="#" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Plan de Calidad</a>
-                <a href="#" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Contadores 24h</a>
-                <a href="#" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
-                <a href="#" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
-                <a href="#" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
+                <a href="/" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Plan de Calidad</a>
+                <a href="/contadores" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Contadores 24h</a>
+                <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
+                <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
+                <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
             </nav>
         </aside>
 
@@ -190,7 +190,6 @@
             contenedor.innerHTML = '<p class="text-sm text-gray-500 italic text-center py-4">Cargando parámetros para la fecha y turno seleccionados...</p>';
 
             try {
-                // Consultar la API del backend que ya filtra estrictamente por día y turno
                 const res = await fetch(`/api/plan-calidad/maestra?fecha=${fechaVal}&turno=${turnoSel}`);
                 const data = await res.json();
                 
@@ -201,7 +200,6 @@
                     return;
                 }
 
-                // Agrupar por zona
                 const zonas = {};
                 data.maestra.forEach(([zona, param, freq, reqTurno, limite]) => {
                     if (!zonas[zona]) zonas[zona] = [];
@@ -285,7 +283,6 @@
             }
         }
 
-        // Carga inicial al abrir la página
         cargarTablaRegistros();
     </script>
 </body>
