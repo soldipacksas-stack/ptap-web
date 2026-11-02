@@ -283,11 +283,11 @@ class PayloadLimpiezaFiltro(BaseModel):
     equipo: str
     operador: str
     tipo_limpieza: str
-    temperatura: Optional[str] = ""
-    hora_muestra_antes: Optional[str] = ""
-    hora_inicio_est: Optional[str] = ""
-    hora_final_est: Optional[str] = ""
-    hora_muestra_despues: Optional[str] = ""
+    temperatura: Optional[str] = "N/A"
+    hora_muestra_antes: Optional[str] = "N/A"
+    hora_inicio_est: Optional[str] = "N/A"
+    hora_final_est: Optional[str] = "N/A"
+    hora_muestra_despues: Optional[str] = "N/A"
     perdida_carbon: Optional[str] = "No"
     agua_inicial: Optional[float] = 0.0
     agua_final: Optional[float] = 0.0
@@ -353,7 +353,7 @@ def eliminar_limpieza_filtro(registro_id: int, db: Session = Depends(get_db)):
                 for row_idx in range(2, ws.max_row + 1):
                     f_val = str(ws.cell(row=row_idx, column=1).value)
                     eq_val = str(ws.cell(row=row_idx, column=2).value)
-                    h_fin_val = str(ws.cell(row=row_idx, column=7).value)
+                    h_fin_val = str(ws.cell(row=row_idx, column=8).value) # Ajustado al índice de hora final en columnas
                     
                     if f_val == str(reg.fecha) and eq_val == str(reg.equipo) and h_fin_val == str(reg.hora_final_est):
                         ws.delete_rows(row_idx)
