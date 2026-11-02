@@ -11,6 +11,7 @@ import os
 from database import engine, Base, get_db
 import models
 
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Control Operacional PTAP - Web")
 templates = Jinja2Templates(directory="templates")
