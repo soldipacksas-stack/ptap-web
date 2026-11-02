@@ -283,11 +283,12 @@ class PayloadLimpiezaFiltro(BaseModel):
     equipo: str
     operador: str
     tipo_limpieza: str
+    temperatura: Optional[str] = ""
     hora_muestra_antes: Optional[str] = ""
     hora_inicio_est: Optional[str] = ""
     hora_final_est: Optional[str] = ""
     hora_muestra_despues: Optional[str] = ""
-    temperatura: Optional[str] = ""
+    perdida_carbon: Optional[str] = "No"
     agua_inicial: Optional[float] = 0.0
     agua_final: Optional[float] = 0.0
     cloro: Optional[str] = ""
@@ -315,11 +316,12 @@ def guardar_limpieza_filtro(payload: PayloadLimpiezaFiltro, db: Session = Depend
         equipo=payload.equipo,
         operador=payload.operador,
         tipo_limpieza=payload.tipo_limpieza,
+        temperatura=payload.temperatura,
         hora_muestra_antes=payload.hora_muestra_antes,
         hora_inicio_est=payload.hora_inicio_est,
         hora_final_est=payload.hora_final_est,
         hora_muestra_despues=payload.hora_muestra_despues,
-        temperatura=payload.temperatura,
+        perdida_carbon=payload.perdida_carbon,
         agua_inicial=payload.agua_inicial,
         agua_final=payload.agua_final,
         consumo_agua=consumo,
@@ -334,7 +336,6 @@ def guardar_limpieza_filtro(payload: PayloadLimpiezaFiltro, db: Session = Depend
 
 @app.delete("/api/filtros/eliminar/{registro_id}")
 def eliminar_limpieza_filtro(registro_id: int, db: Session = Depends(get_db)):
-    # 1. Buscar y eliminar el registro de la base de datos SQL
     reg = db.query(models.RegistroLimpiezaFiltro).filter(models.RegistroLimpiezaFiltro.id == registro_id).first()
     if not reg:
         raise HTTPException(status_code=404, detail="Registro no encontrado en la base de datos.")
@@ -342,7 +343,6 @@ def eliminar_limpieza_filtro(registro_id: int, db: Session = Depends(get_db)):
     db.delete(reg)
     db.commit()
 
-    # 2. Sincronizar y eliminar la fila correspondiente en el archivo Excel 'Bitacora_PTAP.xlsx'
     nombre_archivo = "Bitacora_PTAP.xlsx"
     nombre_hoja = "Limpieza_Filtros"
     try:
@@ -369,9 +369,9 @@ def sincronizar_excel_filtros(payload, consumo):
     nombre_archivo = "Bitacora_PTAP.xlsx"
     nombre_hoja = "Limpieza_Filtros"
     encabezados = [
-        "Fecha", "Equipo", "Operador", "Tipo Limpieza", "Hora Muestra Antes", 
-        "Hora Inicio Est.", "Hora Final Est.", "Hora Muestra Después", 
-        "Temperatura (°C)", "Agua Inicial", "Agua Final", "Consumo (m³)", "Cloro", "Turbidez"
+        "Fecha", "Equipo", "Operador", "Tipo Limpieza", "Temperatura (°C)",
+        "Hora Muestra Antes", "Hora Inicio Est.", "Hora Final Est.", "Hora Muestra Después", 
+        "Pérdida Carbón", "Agua Inicial", "Agua Final", "Consumo (m³)", "Cloro", "Turbidez"
     ]
     try:
         if os.path.exists(nombre_archivo):
@@ -386,9 +386,9 @@ def sincronizar_excel_filtros(payload, consumo):
             ws.append(encabezados)
 
         ws.append([
-            payload.fecha, payload.equipo, payload.operador, payload.tipo_limpieza,
+            payload.fecha, payload.equipo, payload.operador, payload.tipo_limpieza, payload.temperatura,
             payload.hora_muestra_antes, payload.hora_inicio_est, payload.hora_final_est,
-            payload.hora_muestra_despues, payload.temperatura, payload.agua_inicial,
+            payload.hora_muestra_despues, payload.perdida_carbon, payload.agua_inicial,
             payload.agua_final, consumo, payload.cloro, payload.turbidez
         ])
         wb.save(nombre_archivo)
