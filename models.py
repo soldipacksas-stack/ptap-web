@@ -33,14 +33,15 @@ class RegistroLimpiezaFiltro(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     fecha = Column(String(10), index=True)
-    equipo = Column(String(50), index=True)  # F121, F122, F123, F221, F222, F223
-    operador = Column(String(120), index=True)
-    tipo_limpieza = Column(String(100))      # Retrolavado, Esterilización, etc.
+    equipo = Column(String(50), index=True) 
+    operador = Column(String(120))
+    tipo_limpieza = Column(String(100)) 
     hora_muestra_antes = Column(String(20), nullable=True)
     hora_inicio_est = Column(String(20), nullable=True)
     hora_final_est = Column(String(20), nullable=True)
     hora_muestra_despues = Column(String(20), nullable=True)
     temperatura = Column(String(20), nullable=True)
+    perdida_carbon = Column(String(10), default="No", nullable=True)
     agua_inicial = Column(Float, nullable=True)
     agua_final = Column(Float, nullable=True)
     consumo_agua = Column(Float, nullable=True)
