@@ -332,6 +332,39 @@ def guardar_limpieza_filtro(payload: PayloadLimpiezaFiltro, db: Session = Depend
     sincronizar_excel_filtros(payload, consumo)
     return {"status": "ok"}
 
+@app.delete("/api/filtros/eliminar/{registro_id}")
+def eliminar_limpieza_filtro(registro_id: int, db: Session = Depends(get_db)):
+    # 1. Buscar y eliminar el registro de la base de datos SQL
+    reg = db.query(models.RegistroLimpiezaFiltro).filter(models.RegistroLimpiezaFiltro.id == registro_id).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registro no encontrado en la base de datos.")
+    
+    db.delete(reg)
+    db.commit()
+
+    # 2. Sincronizar y eliminar la fila correspondiente en el archivo Excel 'Bitacora_PTAP.xlsx'
+    nombre_archivo = "Bitacora_PTAP.xlsx"
+    nombre_hoja = "Limpieza_Filtros"
+    try:
+        if os.path.exists(nombre_archivo):
+            wb = openpyxl.load_workbook(nombre_archivo)
+            if nombre_hoja in wb.sheetnames:
+                ws = wb[nombre_hoja]
+                for row_idx in range(2, ws.max_row + 1):
+                    f_val = str(ws.cell(row=row_idx, column=1).value)
+                    eq_val = str(ws.cell(row=row_idx, column=2).value)
+                    h_fin_val = str(ws.cell(row=row_idx, column=7).value)
+                    
+                    if f_val == str(reg.fecha) and eq_val == str(reg.equipo) and h_fin_val == str(reg.hora_final_est):
+                        ws.delete_rows(row_idx)
+                        break
+                wb.save(nombre_archivo)
+            wb.close()
+    except Exception as e:
+        print(f"Error al eliminar fila en Excel de filtros: {e}")
+
+    return {"status": "ok", "message": "Registro eliminado correctamente"}
+
 def sincronizar_excel_filtros(payload, consumo):
     nombre_archivo = "Bitacora_PTAP.xlsx"
     nombre_hoja = "Limpieza_Filtros"
