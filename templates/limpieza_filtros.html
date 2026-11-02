@@ -68,13 +68,14 @@
                                 <th class="p-2.5">Tipo Limpieza</th>
                                 <th class="p-2.5">H. Inicio</th>
                                 <th class="p-2.5">H. Final</th>
+                                <th class="p-2.5">Temp (°C)</th>
+                                <th class="p-2.5">Pérdida Carbón</th>
                                 <th class="p-2.5">Consumo (m³)</th>
-                                <th class="p-2.5">Cloro / Turbidez</th>
                                 <th class="p-2.5 text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="body-tabla-filtros" class="divide-y divide-gray-200">
-                            <tr><td colspan="9" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>
+                            <tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -82,7 +83,7 @@
 
             <!-- Sección de Tanques / Cronómetros de Esterilización (48 Horas) -->
             <div class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6">
-                <h3 class="font-bold text-[#0b4f2f] mb-4">⏱️ Estado de Esterilización — Ciclo 48 horas (Hora Militar 24h)</h3>
+                <h3 class="font-bold text-[#0b4f2f] mb-4">⏱️ Estado de Esterilización — Ciclo 48 horas (Formato 24h)</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="grid-cronometros">
                     <!-- Generado dinámicamente -->
                 </div>
@@ -110,7 +111,7 @@
             <div class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block font-bold">Fecha de Finalización (Cambio de día soportado):</label>
+                        <label class="block font-bold">Fecha de Finalización:</label>
                         <input type="date" id="form_fecha" class="border rounded p-1.5 w-full">
                     </div>
                     <div>
@@ -135,27 +136,43 @@
                     </select>
                 </div>
 
-                <div>
-                    <label class="block font-bold">Tipo de limpieza:</label>
-                    <select id="form_tipo" class="border rounded p-1.5 w-full">
-                        <option value="Esterilización">Esterilización</option>
-                        <option value="Retrolavado">Retrolavado</option>
-                        <option value="Retrolavado y Esterilización">Retrolavado y Esterilización</option>
-                    </select>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Tipo de limpieza:</label>
+                        <select id="form_tipo" class="border rounded p-1.5 w-full">
+                            <option value="Esterilización">Esterilización</option>
+                            <option value="Retrolavado con parada">Retrolavado con parada</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold">Temperatura (°C) <span class="text-xs text-gray-500 font-normal">(Óptima: 85°C)</span>:</label>
+                        <input type="text" id="form_temperatura" class="border rounded p-1.5 w-full" placeholder="Ej: 85">
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block font-bold">Hora Inicio Esterilización (24h):</label>
-                        <input type="time" id="form_h_ini" class="border rounded p-1.5 w-full" value="22:00">
+                        <input type="time" lang="en-GB" id="form_h_ini" class="border rounded p-1.5 w-full" value="22:00">
                     </div>
                     <div>
                         <label class="block font-bold">Hora Final Esterilización (24h):</label>
-                        <input type="time" id="form_h_fin" class="border rounded p-1.5 w-full" value="02:00">
+                        <input type="time" lang="en-GB" id="form_h_fin" class="border rounded p-1.5 w-full" value="02:00">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Muestra Microbiología (Antes):</label>
+                        <input type="time" lang="en-GB" id="form_h_muestra_antes" class="border rounded p-1.5 w-full" value="21:30">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Muestra Microbiología (Después):</label>
+                        <input type="time" lang="en-GB" id="form_h_muestra_despues" class="border rounded p-1.5 w-full" value="02:30">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
                     <div>
                         <label class="block font-bold">Contador Agua Inicial (m³):</label>
                         <input type="number" id="form_agua_ini" class="border rounded p-1.5 w-full" value="0">
@@ -163,6 +180,13 @@
                     <div>
                         <label class="block font-bold">Contador Agua Final (m³):</label>
                         <input type="number" id="form_agua_fin" class="border rounded p-1.5 w-full" value="0">
+                    </div>
+                    <div>
+                        <label class="block font-bold">¿Pérdida de Carbón?:</label>
+                        <select id="form_perdida_carbon" class="border rounded p-1.5 w-full font-bold">
+                            <option value="No">No</option>
+                            <option value="Sí">Sí</option>
+                        </select>
                     </div>
                 </div>
 
@@ -227,7 +251,7 @@
             });
 
             if (filtrados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
             } else {
                 filtrados.forEach((item, index) => {
                     const registroId = item.id !== undefined ? item.id : index; 
@@ -239,8 +263,9 @@
                             <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
                             <td class="p-2.5 border-b">${item.hora_inicio_est || '-'}</td>
                             <td class="p-2.5 border-b">${item.hora_final_est || '-'}</td>
+                            <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'} °C</td>
+                            <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
-                            <td class="p-2.5 border-b">Cl: ${item.cloro || '-'} / T: ${item.turbidez || '-'}</td>
                             <td class="p-2.5 border-b text-center">
                                 <button onclick="event.stopPropagation(); eliminarRegistro('${registroId}')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Eliminar registro">
                                     🗑️ Eliminar
@@ -294,14 +319,12 @@
                     ultimaHTML = `${regFiltro.fecha} ${horaFin} (24h)`;
                     estadoHTML = '<span class="text-green-700 font-bold">🟢 Ciclo activo (48h)</span>';
 
-                    // Creamos el timestamp exacto combinando la fecha de término y la hora militar (24h)
                     const fechaHoraFin = new Date(`${regFiltro.fecha}T${horaFin}:00`).getTime();
                     timestampFin = fechaHoraFin + (48 * 60 * 60 * 1000);
                 }
 
                 grid.innerHTML += `
                     <div onclick="abrirModalFiltrosPara('${eq}')" class="bg-gray-50 border-2 border-dashed hover:border-[#17803d] rounded-xl p-4 flex items-center space-x-4 shadow-sm cursor-pointer transition hover:bg-green-50/40 relative group">
-                        <!-- Tanque gráfico que se va vaciando -->
                         <div class="w-16 h-20 bg-gray-200 rounded-b-lg border-2 border-[#0b4f2f] relative overflow-hidden flex flex-col justify-end shadow-inner">
                             <div id="${idTanque}" class="w-full bg-[#17803d] transition-all duration-500" style="height: 0%;"></div>
                             <div class="absolute inset-0 flex items-center justify-center font-bold text-[10px] text-white drop-shadow">
@@ -319,7 +342,6 @@
             });
         }
 
-        // Bucle en tiempo real que maneja cuenta regresiva y cuenta positiva (exceso)
         setInterval(() => {
             const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
             const ahora = new Date().getTime();
@@ -339,7 +361,6 @@
                 const inicioTime = targetTime - (48 * 60 * 60 * 1000);
                 const diferenciaMs = targetTime - ahora;
 
-                // Cálculo del nivel del tanque (se desocupa del 100% al 0%)
                 let transcurridoMs = ahora - inicioTime;
                 let porcentaje = 100 - ((transcurridoMs / (48 * 60 * 60 * 1000)) * 100);
                 if (porcentaje < 0) porcentaje = 0;
@@ -347,7 +368,6 @@
                 if (tanqueEl) tanqueEl.style.height = `${porcentaje}%`;
 
                 if (diferenciaMs <= 0) {
-                    // Si se pasó de las 48 horas, cuenta en positivo (+) con color rojo parpadeante
                     const excesoMs = Math.abs(diferenciaMs);
                     const totalSegundos = Math.floor(excesoMs / 1000);
                     const h = String(Math.floor(totalSegundos / 3600)).padStart(2, '0');
@@ -434,8 +454,12 @@
                 equipo: document.getElementById('form_equipo').value,
                 operador: document.getElementById('form_operador').value,
                 tipo_limpieza: document.getElementById('form_tipo').value,
+                temperatura: document.getElementById('form_temperatura').value,
                 hora_inicio_est: document.getElementById('form_h_ini').value,
                 hora_final_est: document.getElementById('form_h_fin').value,
+                hora_muestra_antes: document.getElementById('form_h_muestra_antes').value,
+                hora_muestra_despues: document.getElementById('form_h_muestra_despues').value,
+                perdida_carbon: document.getElementById('form_perdida_carbon').value,
                 agua_inicial: parseFloat(document.getElementById('form_agua_ini').value) || 0,
                 agua_final: parseFloat(document.getElementById('form_agua_fin').value) || 0,
                 cloro: document.getElementById('form_cloro').value,
