@@ -66,8 +66,8 @@
                                 <th class="p-2.5">Equipo</th>
                                 <th class="p-2.5">Operador</th>
                                 <th class="p-2.5">Tipo Limpieza</th>
-                                <th class="p-2.5">H. Inicio</th>
-                                <th class="p-2.5">H. Final</th>
+                                <th class="p-2.5">H. Inicio (24h)</th>
+                                <th class="p-2.5">H. Final (24h)</th>
                                 <th class="p-2.5">Temp (°C)</th>
                                 <th class="p-2.5">Pérdida Carbón</th>
                                 <th class="p-2.5">Consumo (m³)</th>
@@ -139,36 +139,36 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block font-bold">Tipo de limpieza:</label>
-                        <select id="form_tipo" class="border rounded p-1.5 w-full">
+                        <select id="form_tipo" class="border rounded p-1.5 w-full" onchange="cambiarTipoLimpieza()">
                             <option value="Esterilización">Esterilización</option>
                             <option value="Retrolavado con parada">Retrolavado con parada</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block font-bold">Temperatura (°C) <span class="text-xs text-gray-500 font-normal">(Óptima: 85°C)</span>:</label>
-                        <input type="text" id="form_temperatura" class="border rounded p-1.5 w-full" placeholder="Ej: 85">
+                        <label class="block font-bold">Temperatura (°C) <span class="text-xs text-gray-500 font-normal">(Óptima: 85°C o N/A)</span>:</label>
+                        <input type="text" id="form_temperatura" class="border rounded p-1.5 w-full" value="85" placeholder="Ej: 85 o N/A">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block font-bold">Hora Inicio Esterilización (24h):</label>
-                        <input type="time" lang="en-GB" id="form_h_ini" class="border rounded p-1.5 w-full" value="22:00">
+                        <input type="text" id="form_h_ini" class="border rounded p-1.5 w-full" placeholder="Ej: 22:00" value="22:00">
                     </div>
                     <div>
                         <label class="block font-bold">Hora Final Esterilización (24h):</label>
-                        <input type="time" lang="en-GB" id="form_h_fin" class="border rounded p-1.5 w-full" value="02:00">
+                        <input type="text" id="form_h_fin" class="border rounded p-1.5 w-full" placeholder="Ej: 02:00" value="02:00">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block font-bold">Muestra Microbiología (Antes):</label>
-                        <input type="time" lang="en-GB" id="form_h_muestra_antes" class="border rounded p-1.5 w-full" value="21:30">
+                        <input type="text" id="form_h_muestra_antes" class="border rounded p-1.5 w-full" placeholder="Ej: 21:30 o N/A" value="21:30">
                     </div>
                     <div>
                         <label class="block font-bold">Muestra Microbiología (Después):</label>
-                        <input type="time" lang="en-GB" id="form_h_muestra_despues" class="border rounded p-1.5 w-full" value="02:30">
+                        <input type="text" id="form_h_muestra_despues" class="border rounded p-1.5 w-full" placeholder="Ej: 02:30 o N/A" value="02:30">
                     </div>
                 </div>
 
@@ -217,6 +217,23 @@
         let cronometrosData = [];
         let chartInstancia = null;
 
+        function cambiarTipoLimpieza() {
+            const tipo = document.getElementById('form_tipo').value;
+            if (tipo === "Retrolavado con parada") {
+                document.getElementById('form_temperatura').value = "N/A";
+                document.getElementById('form_h_ini').value = "N/A";
+                document.getElementById('form_h_fin').value = "N/A";
+                document.getElementById('form_h_muestra_antes').value = "N/A";
+                document.getElementById('form_h_muestra_despues').value = "N/A";
+            } else {
+                document.getElementById('form_temperatura').value = "85";
+                document.getElementById('form_h_ini').value = "22:00";
+                document.getElementById('form_h_fin').value = "02:00";
+                document.getElementById('form_h_muestra_antes').value = "21:30";
+                document.getElementById('form_h_muestra_despues').value = "02:30";
+            }
+        }
+
         function abrirModalFiltrosPara(equipo) {
             document.getElementById('form_equipo').value = equipo;
             document.getElementById('modal-titulo').textContent = `🛠️ Registrar Limpieza para Filtro: ${equipo}`;
@@ -263,7 +280,7 @@
                             <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
                             <td class="p-2.5 border-b">${item.hora_inicio_est || '-'}</td>
                             <td class="p-2.5 border-b">${item.hora_final_est || '-'}</td>
-                            <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'} °C</td>
+                            <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'}</td>
                             <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
                             <td class="p-2.5 border-b text-center">
@@ -303,8 +320,8 @@
 
             filtros.forEach(eq => {
                 const regsEquipo = cronometrosData
-                    .filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización"))
-                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`));
+                    .filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
+                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est}:00`) - new Date(`${a.fecha}T${a.hora_final_est}:00`));
 
                 const regFiltro = regsEquipo.length > 0 ? regsEquipo[0] : null;
                 
@@ -315,7 +332,7 @@
                 let timestampFin = null;
 
                 if (regFiltro) {
-                    const horaFin = regFiltro.hora_final_est || '00:00';
+                    const horaFin = regFiltro.hora_final_est;
                     ultimaHTML = `${regFiltro.fecha} ${horaFin} (24h)`;
                     estadoHTML = '<span class="text-green-700 font-bold">🟢 Ciclo activo (48h)</span>';
 
@@ -393,12 +410,12 @@
             const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
             const ahora = new Date().getTime();
             const horasTranscurridas = filtros.map(eq => {
-                const regs = cronometrosData.filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización"))
-                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`));
+                const regs = cronometrosData.filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
+                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est}:00`) - new Date(`${a.fecha}T${a.hora_final_est}:00`));
                 
                 if (regs.length === 0) return 0;
                 const reg = regs[0];
-                const horaFin = reg.hora_final_est || '00:00';
+                const horaFin = reg.hora_final_est;
                 const finTime = new Date(`${reg.fecha}T${horaFin}:00`).getTime();
                 const diffHoras = (ahora - finTime) / (1000 * 60 * 60);
                 return diffHoras > 0 ? parseFloat(diffHoras.toFixed(1)) : 0;
