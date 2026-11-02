@@ -69,10 +69,11 @@
                                 <th class="p-2.5">H. Final</th>
                                 <th class="p-2.5">Consumo (m³)</th>
                                 <th class="p-2.5">Cloro / Turbidez</th>
+                                <th class="p-2.5 text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="body-tabla-filtros" class="divide-y divide-gray-200">
-                            <tr><td colspan="8" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>
+                            <tr><td colspan="9" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -82,7 +83,7 @@
             <div class="bg-white p-5 rounded-lg shadow border border-gray-200">
                 <h3 class="font-bold text-[#0b4f2f] mb-4">⏱️ Cronómetros de Esterilización — Ciclo 48 horas</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="grid-cronometros">
-                    <!-- Se generan dinámicamente mediante JS para F121, F122, F123, F221, F222, F223 -->
+                    <!-- Se generan dinámicamente mediante JS -->
                 </div>
             </div>
         </main>
@@ -213,9 +214,10 @@
             });
 
             if (filtrados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
             } else {
-                filtrados.forEach(item => {
+                filtrados.forEach((item, index) => {
+                    const registroId = item.id !== undefined ? item.id : index; 
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50">
                             <td class="p-2.5 border-b">${item.fecha}</td>
@@ -226,6 +228,11 @@
                             <td class="p-2.5 border-b">${item.hora_final_est || '-'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
                             <td class="p-2.5 border-b">Cl: ${item.cloro || '-'} / T: ${item.turbidez || '-'}</td>
+                            <td class="p-2.5 border-b text-center">
+                                <button onclick="eliminarRegistro('${registroId}')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Eliminar registro erróneo">
+                                    🗑️ Eliminar
+                                </button>
+                            </td>
                         </tr>
                     `;
                 });
@@ -233,6 +240,28 @@
 
             cronometrosData = data.data;
             renderizarCronometros();
+        }
+
+        async function eliminarRegistro(id) {
+            if (!confirm("¿Estás seguro de que deseas eliminar este registro erróneo?")) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/filtros/eliminar/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    alert("¡Registro eliminado con éxito!");
+                    cargarTablaFiltros();
+                } else {
+                    alert("Error al intentar eliminar el registro en el servidor.");
+                }
+            } catch (error) {
+                console.error("Error de red:", error);
+                alert("Hubo un error de conexión con el servidor.");
+            }
         }
 
         function renderizarCronometros() {
@@ -255,7 +284,7 @@
 
                 if (regFiltro) {
                     const horaFin = regFiltro.hora_final_est || '00:00';
-                    ultimaHTML = `${regF_fecha = regFiltro.fecha} ${horaFin}`;
+                    ultimaHTML = `${regFiltro.fecha} ${horaFin}`;
                     estadoHTML = '<span class="text-green-700 font-bold">🟢 Ciclo activo (48h)</span>';
 
                     const fechaHoraFin = new Date(`${regFiltro.fecha}T${horaFin}:00`);
@@ -317,7 +346,7 @@
                 turbidez: document.getElementById('form_turbidez').value
             };
 
-            const res = await fetch('/api/filtros/guardar', {
+            const res = href = await fetch('/api/filtros/guardar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
