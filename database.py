@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # URL corregida con el nombre exacto de tu host en Supabase y la contraseña JaviMay2206
-SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://postgres:JaviMay2206@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
