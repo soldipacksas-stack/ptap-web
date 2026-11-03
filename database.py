@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # URL de conexión externa de Supabase (reemplaza [YOUR-PASSWORD] con tu contraseña real)
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:TuContraseñaReal@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
+SQLALCHEMY_DATABASE_URL = "postgresql://postgres:*JaviMay2206@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
 
 # SQLAlchemy requiere que la URL empiece por postgresql:// en lugar de postgres://
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
