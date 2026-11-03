@@ -33,7 +33,7 @@
 
             <!-- Panel de Registros e Historial -->
             <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
-                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Registros de Limpieza y Esterilización</h3>
+                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Registros de Limpieza y Esterilización (Últimas 2 por filtro)</h3>
                 <div class="flex flex-wrap items-center gap-4 text-sm mb-4">
                     <div>
                         <label class="block font-bold mb-1">Fecha:</label>
@@ -100,7 +100,7 @@
         </main>
     </div>
 
-    <!-- Modal para Registrar Limpieza de Filtro -->
+    <!-- Modal para Registrar / Modificar Limpieza de Filtro -->
     <div id="modalFiltros" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
@@ -109,6 +109,9 @@
             </div>
             
             <div class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
+                <!-- Campo oculto para almacenar el ID en caso de modificación -->
+                <input type="hidden" id="form_registro_id" value="">
+
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block font-bold">Fecha de Finalización:</label>
@@ -235,15 +238,60 @@
         }
 
         function abrirModalFiltrosPara(equipo) {
+            document.getElementById('form_registro_id').value = ""; // Nuevo registro
             document.getElementById('form_equipo').value = equipo;
             document.getElementById('modal-titulo').textContent = `🛠️ Registrar Limpieza para Filtro: ${equipo}`;
+            
+            // Limpiar formulario para evitar datos residuales
+            limpiarFormularioModal();
+
             document.getElementById('modalFiltros').classList.remove('hidden');
             document.getElementById('modalFiltros').classList.add('flex');
+        }
+
+        function abrirModalModificar(item) {
+            document.getElementById('form_registro_id').value = item.id !== undefined ? item.id : '';
+            document.getElementById('form_equipo').value = item.equipo || 'F121';
+            document.getElementById('modal-titulo').textContent = `✏️ Modificar Registro de Limpieza: ${item.equipo}`;
+
+            // Cargar datos existentes en los campos del modal
+            document.getElementById('form_fecha').value = item.fecha || hoyStr;
+            document.getElementById('form_operador').value = item.operador || '';
+            document.getElementById('form_tipo').value = item.tipo_limpieza || 'Esterilización';
+            document.getElementById('form_temperatura').value = item.temperatura || '85';
+            document.getElementById('form_h_ini').value = item.hora_inicio_est || '22:00';
+            document.getElementById('form_h_fin').value = item.hora_final_est || '02:00';
+            document.getElementById('form_h_muestra_antes').value = item.hora_muestra_antes || '21:30';
+            document.getElementById('form_h_muestra_despues').value = item.hora_muestra_despues || '02:30';
+            document.getElementById('form_agua_ini').value = item.agua_inicial || 0;
+            document.getElementById('form_agua_fin').value = item.agua_final || 0;
+            document.getElementById('form_perdida_carbon').value = item.perdida_carbon || 'No';
+            document.getElementById('form_cloro').value = item.cloro || '';
+            document.getElementById('form_turbidez').value = item.turbidez || '';
+
+            document.getElementById('modalFiltros').classList.remove('hidden');
+            document.getElementById('modalFiltros').classList.add('flex');
+        }
+
+        function limpiarFormularioModal() {
+            document.getElementById('form_fecha').value = hoyStr;
+            document.getElementById('form_tipo').value = "Esterilización";
+            document.getElementById('form_temperatura').value = "85";
+            document.getElementById('form_h_ini').value = "22:00";
+            document.getElementById('form_h_fin').value = "02:00";
+            document.getElementById('form_h_muestra_antes').value = "21:30";
+            document.getElementById('form_h_muestra_despues').value = "02:30";
+            document.getElementById('form_agua_ini').value = "0";
+            document.getElementById('form_agua_fin').value = "0";
+            document.getElementById('form_perdida_carbon').value = "No";
+            document.getElementById('form_cloro').value = "";
+            document.getElementById('form_turbidez').value = "";
         }
 
         function cerrarModalFiltros() {
             document.getElementById('modalFiltros').classList.add('hidden');
             document.getElementById('modalFiltros').classList.remove('flex');
+            limpiarFormularioModal();
         }
 
         function limpiarFiltrosTabla() {
@@ -261,17 +309,33 @@
             const fechaFiltro = document.getElementById('filtro_fecha').value;
             const equipoFiltro = document.getElementById('filtro_equipo').value;
 
-            const filtrados = data.data.filter(item => {
+            let filtrados = data.data.filter(item => {
                 let matchFecha = fechaFiltro ? item.fecha.includes(fechaFiltro) : true;
                 let matchEquipo = equipoFiltro !== "Todos" ? item.equipo === equipoFiltro : true;
                 return matchFecha && matchEquipo;
             });
+
+            // Si no se está aplicando un filtro específico por fecha o equipo que requiera ver más,
+            // limitamos el histórico global a las 2 últimas esterilizaciones por cada filtro.
+            if (!fechaFiltro && equipoFiltro === "Todos") {
+                const filtrosLista = ["F121", "F122", "F123", "F221", "F222", "F223"];
+                let ultimosDosPorFiltro = [];
+                filtrosLista.forEach(eq => {
+                    const regsEq = data.data
+                        .filter(r => r.equipo === eq)
+                        .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`))
+                        .slice(0, 2); // Tomar solo las 2 últimas
+                    ultimosDosPorFiltro.push(...regsEq);
+                });
+                filtrados = ultimosDosPorFiltro.sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`));
+            }
 
             if (filtrados.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
             } else {
                 filtrados.forEach((item, index) => {
                     const registroId = item.id !== undefined ? item.id : index; 
+                    const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50">
                             <td class="p-2.5 border-b">${item.fecha}</td>
@@ -284,8 +348,8 @@
                             <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
                             <td class="p-2.5 border-b text-center">
-                                <button onclick="event.stopPropagation(); eliminarRegistro('${registroId}')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Eliminar registro">
-                                    🗑️ Eliminar
+                                <button onclick="event.stopPropagation(); abrirModalModificar(${itemJson})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Modificar registro">
+                                    ✏️ Modificar
                                 </button>
                             </td>
                         </tr>
@@ -296,21 +360,6 @@
             cronometrosData = data.data;
             renderizarCronometrosYTanques();
             actualizarGrafica();
-        }
-
-        async function eliminarRegistro(id) {
-            if (!confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
-            try {
-                const res = await fetch(`/api/filtros/eliminar/${id}`, { method: 'DELETE' });
-                if (res.ok) {
-                    alert("¡Registro eliminado con éxito!");
-                    cargarTablaFiltros();
-                } else {
-                    alert("Error al eliminar el registro.");
-                }
-            } catch (error) {
-                console.error("Error:", error);
-            }
         }
 
         function renderizarCronometrosYTanques() {
@@ -466,6 +515,7 @@
         }
 
         async function enviarRegistroFiltro() {
+            const registroId = document.getElementById('form_registro_id').value;
             const payload = {
                 fecha: document.getElementById('form_fecha').value,
                 equipo: document.getElementById('form_equipo').value,
@@ -483,8 +533,16 @@
                 turbidez: document.getElementById('form_turbidez').value
             };
 
-            const res = await fetch('/api/filtros/guardar', {
-                method: 'POST',
+            // Determinar si es una actualización (PUT/POST según tu backend) o guardado nuevo
+            let url = '/api/filtros/guardar';
+            let method = 'POST';
+            if (registroId) {
+                url = `/api/filtros/actualizar/${registroId}`; // Ajusta si tu ruta backend es diferente
+                // o si manejas PUT: method = 'PUT';
+            }
+
+            const res = await fetch(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -492,6 +550,7 @@
             if (res.ok) {
                 alert("¡Registro guardado con éxito!");
                 cerrarModalFiltros();
+                limpiarFormularioModal(); // Limpia los datos de la plantilla
                 cargarTablaFiltros();
             } else {
                 alert("Error al guardar el registro.");
