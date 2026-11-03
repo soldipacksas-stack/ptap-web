@@ -347,9 +347,12 @@
                             <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'}</td>
                             <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
-                            <td class="p-2.5 border-b text-center">
+                            <td class="p-2.5 border-b text-center space-x-1 whitespace-nowrap">
                                 <button onclick="event.stopPropagation(); abrirModalModificar(${itemJson})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Modificar registro">
                                     ✏️ Modificar
+                                </button>
+                                <button onclick="event.stopPropagation(); eliminarRegistro('${registroId}')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Eliminar registro">
+                                    🗑️ Eliminar
                                 </button>
                             </td>
                         </tr>
@@ -360,6 +363,21 @@
             cronometrosData = data.data;
             renderizarCronometrosYTanques();
             actualizarGrafica();
+        }
+
+        async function eliminarRegistro(id) {
+            if (!confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
+            try {
+                const res = await fetch(`/api/filtros/eliminar/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    alert("¡Registro eliminado con éxito!");
+                    cargarTablaFiltros();
+                } else {
+                    alert("Error al eliminar el registro.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
         }
 
         function renderizarCronometrosYTanques() {
@@ -533,12 +551,11 @@
                 turbidez: document.getElementById('form_turbidez').value
             };
 
-            // Determinar si es una actualización (PUT/POST según tu backend) o guardado nuevo
             let url = '/api/filtros/guardar';
             let method = 'POST';
             if (registroId) {
-                url = `/api/filtros/actualizar/${registroId}`; // Ajusta si tu ruta backend es diferente
-                // o si manejas PUT: method = 'PUT';
+                url = `/api/filtros/actualizar/${registroId}`;
+                method = 'PUT';
             }
 
             const res = await fetch(url, {
@@ -548,12 +565,12 @@
             });
 
             if (res.ok) {
-                alert("¡Registro guardado con éxito!");
+                alert(registroId ? "¡Registro modificado con éxito!" : "¡Registro guardado con éxito!");
                 cerrarModalFiltros();
-                limpiarFormularioModal(); // Limpia los datos de la plantilla
+                limpiarFormularioModal(); 
                 cargarTablaFiltros();
             } else {
-                alert("Error al guardar el registro.");
+                alert("Error al procesar el registro.");
             }
         }
 
