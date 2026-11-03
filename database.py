@@ -3,7 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# URL de conexión con el controlador psycopg2 y tu contraseña limpia
+# URL de conexión con Supabase usando la contraseña exacta y el conector psycopg2
 SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://postgres:JaviMay2206@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
 
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
