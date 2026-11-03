@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contadores 24h - PTAP ZFCCC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg">
+            <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
+            <nav class="space-y-2 font-medium text-sm">
+                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Plan de Calidad</a>
+                <a href="/contadores" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Contadores 24h</a>
+                <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
+                <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
+                <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-y-auto p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-[#0b4f2f]">Módulo: Contadores y Horómetros 24h</h2>
+                <button onclick="abrirModalContadores()" class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2.5 rounded-lg font-semibold shadow">
+                    + Registrar Lecturas 24h
+                </button>
+            </div>
+
+            <!-- Panel de Filtros -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
+                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Tabla de Control y Verificación de Consumos</h3>
+                <div class="flex flex-wrap items-center gap-4 text-sm mb-4">
+                    <div>
+                        <label class="block font-bold mb-1">Filtrar por Fecha:</label>
+                        <input type="date" id="filtro_fecha" class="border rounded p-1.5 w-36">
+                    </div>
+                    <div class="flex items-end space-x-2 mt-5">
+                        <button onclick="cargarTablaContadores()" class="bg-[#17803d] text-white px-3 py-1.5 rounded font-semibold">Consultar</button>
+                        <button onclick="limpiarFiltrosContadores()" class="bg-[#6c757d] text-white px-3 py-1.5 rounded font-semibold">Limpiar</button>
+                    </div>
+                </div>
+
+                <!-- Tabla Matricial de Registros -->
+                <div class="overflow-x-auto max-h-[450px]">
+                    <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead id="head-tabla-contadores" class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
+                            <!-- Se llena dinámicamente -->
+                        </thead>
+                        <tbody id="body-tabla-contadores" class="divide-y divide-gray-200">
+                            <tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros de contadores todavía.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Registrar Contadores 24h (Consolidado) -->
+    <div id="modalContadores" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+                <h3 class="text-lg font-bold">📊 Registro de Contadores y Horómetros (5:00 a.m.)</h3>
+                <button onclick="cerrarModalContadores()" class="text-xl font-bold">&times;</button>
+            </div>
+            
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-4 text-sm">
+                <div>
+                    <label class="block font-bold">Fecha:</label>
+                    <input type="date" id="form_fecha" class="border rounded p-1.5 w-36">
+                </div>
+                <div class="flex-1">
+                    <label class="block font-bold">Operador:</label>
+                    <select id="form_operador" class="border rounded p-1.5 w-full">
+                        {% for op in operadores %}
+                        <option value="{{ op }}" {% if 'SOLIS' in op %}selected{% endif %}>{{ op }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Contenedor dinámico de medidores y tanques -->
+            <div id="contenedor-medidores" class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
+                <!-- Se inyectan los inputs mediante JavaScript -->
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                <button onclick="cerrarModalContadores()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
+                <button onclick="enviarRegistroContadores()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Registros 24h</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const hoyStr = new Date().toISOString().split('T')[0];
+        document.getElementById('form_fecha').value = hoyStr;
+        document.getElementById('filtro_fecha').value = "";
+
+        const listaMedidores = [
+            {nombre: "Medidor principal PTAP", tipo: "lectura"},
+            {nombre: "Nivel % TK 010", tipo: "nivel"},
+            {nombre: "Nivel % TK AWT", tipo: "nivel"},
+            {nombre: "Nivel % TK 220", tipo: "nivel"},
+            {nombre: "U.F 111", tipo: "lectura"},
+            {nombre: "U.F 112", type: "lectura"},
+            {nombre: "U.F 211", type: "lectura"},
+            {nombre: "U.F 212", type: "lectura"},
+            {nombre: "F 121", type: "lectura"},
+            {nombre: "F 122", type: "lectura"},
+            {nombre: "F 123", type: "lectura"},
+            {nombre: "F 221", type: "lectura"},
+            {nombre: "F 222", type: "lectura"},
+            {nombre: "F 223", type: "lectura"},
+            {nombre: "Medidor by-pass línea cervecera", type: "lectura"},
+            {nombre: "Medidor by-pass Ósmosis Inversa", type: "lectura"},
+            {nombre: "Medidor by-pass agua doméstica", type: "lectura"}
+        ];
+
+        function construirFormularioMedidores() {
+            const contenedor = document.getElementById('contenedor-medidores');
+            contenedor.innerHTML = '<h4 class="font-bold text-[#0b4f2f] border-b pb-1">--- LECTURAS A LAS 5:00 A.M. ---</h4>';
+
+            listaMedidores.forEach(item => {
+                const labelTxt = item.tipo === "nivel" ? `${item.nombre} (% nivel):` : `${item.nombre} (Lectura m³):`;
+                contenedor.innerHTML += `
+                    <div class="flex flex-col">
+                        <label class="text-xs font-semibold text-gray-700">${labelTxt}</label>
+                        <input type="number" step="0.01" data-nombre="${item.nombre}" data-tipo="${item.tipo}" class="input-medidor border rounded p-1.5 text-sm w-full" value="0">
+                    </div>
+                `;
+            });
+        }
+
+        function abrirModalContadores() {
+            document.getElementById('modalContadores').classList.remove('hidden');
+            document.getElementById('modalContadores').classList.add('flex');
+            document.getElementById('form_fecha').value = hoyStr;
+            construirFormularioMedidores();
+        }
+
+        function cerrarModalContadores() {
+            document.getElementById('modalContadores').classList.add('hidden');
+            document.getElementById('modalContadores').classList.remove('flex');
+        }
+
+        function limpiarFiltrosContadores() {
+            document.getElementById('filtro_fecha').value = "";
+            cargarTablaContadores();
+        }
+
+        async function cargarTablaContadores() {
+            const res = await fetch('/api/contadores/registros');
+            const data = await res.json();
+            
+            const thead = document.getElementById('head-tabla-contadores');
+            const tbody = document.getElementById('body-tabla-contadores');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (!data.data || data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>';
+                return;
+            }
+
+            const fechaFiltro = document.getElementById('filtro_fecha').value;
+            const filtrados = data.data.filter(item => {
+                return fechaFiltro ? item.fecha.includes(fechaFiltro) : true;
+            });
+
+            if (filtrados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
+                return;
+            }
+
+            // Construir cabeceras dinámicas basadas en el primer registro
+            let headersHtml = '<tr><th class="p-2.5">Fecha</th><th class="p-2.5">Operador</th>';
+            const sampleKeys = Object.keys(filtrados[0].lecturas || {});
+            sampleKeys.forEach(k => {
+                headersHtml += `<th class="p-2.5">${k}</th>`;
+            });
+            headersHtml += '</tr>';
+            thead.innerHTML = headersHtml;
+
+            filtrados.forEach(item => {
+                let rowHtml = `<tr class="hover:bg-gray-50"><td class="p-2.5 border-b">${item.fecha}</td><td class="p-2.5 border-b">${item.operador}</td>`;
+                sampleKeys.forEach(k => {
+                    rowHtml += `<td class="p-2.5 border-b font-mono">${item.lecturas[k] !== undefined ? item.lecturas[k] : '-'}</td>`;
+                });
+                rowHtml += '</tr>';
+                tbody.innerHTML += rowHtml;
+            });
+        }
+
+        async function enviarRegistroContadores() {
+            const inputs = document.querySelectorAll('.input-medidor');
+            const lecturas = {};
+
+            inputs.forEach(inp => {
+                const nombre = inp.dataset.nombre;
+                const tipo = inp.dataset.tipo;
+                const val = parseFloat(inp.value) || 0;
+                
+                lecturas[nombre] = val;
+            });
+
+            const payload = {
+                fecha: document.getElementById('form_fecha').value,
+                operador: document.getElementById('form_operador').value,
+                lecturas: lecturas
+            };
+
+            const res = await fetch('/api/contadores/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                alert("¡Registros de contadores 24h guardados con éxito!");
+                cerrarModalContadores();
+                cargarTablaContadores();
+            } else {
+                alert("Error al guardar los registros.");
+            }
+        }
+
+        cargarTablaContadores();
+    </script>
+</body>
+</html>
