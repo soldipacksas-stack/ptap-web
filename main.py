@@ -578,3 +578,23 @@ def guardar_limpieza_uf(payload: PayloadLimpiezaUF):
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/plan-calidad/guardar")
+def guardar_plan_calidad(data: PlanCalidadSchema, db: Session = Depends(get_db)):
+    for reg in data.registros:
+        # Validar si cumple con el límite o rango si es numérico, o guardar directo
+        resultado = evaluar_limite(reg.valor, reg.limite) # Tu lógica de validación
+        
+        nuevo_registro = models.RegistroPlanCalidad(
+            fecha=data.fecha,
+            turno=data.turno,
+            operador=data.operador,
+            zona=reg.zona,
+            parametro=reg.parametro,
+            valor=reg.valor,
+            limite=reg.limite,
+            frecuencia=reg.frecuencia, # Si agregaste la columna en base de datos
+            resultado=resultado
+        )
+        db.add(nuevo_registro)
+    db.commit()
+    return {"status": "success"}
