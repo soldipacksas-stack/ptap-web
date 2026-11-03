@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # URL de conexión externa de Supabase con el controlador psycopg2
-SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://postgres:*JaviMay2206@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
+SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://postgres:JaviMay2206@db.nbolmzwhwcspydyzfel.supabase.co:5432/postgres"
 
 # Asegurar el formato correcto para SQLAlchemy
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
