@@ -25,9 +25,14 @@
         <main class="flex-1 flex flex-col overflow-y-auto p-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-[#0b4f2f]">Control del Plan de Calidad PTAP</h2>
-                <button onclick="abrirModalFormulario()" class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2.5 rounded-lg font-semibold shadow transition">
-                    + Registrar Plan de Calidad
-                </button>
+                <div class="space-x-2">
+                    <button onclick="abrirModalAdministracion()" class="bg-[#2d6a4f] hover:bg-[#1f4a37] text-white px-4 py-2.5 rounded-lg font-semibold shadow transition">
+                        ⚙️ Administrir / Modificar Turno
+                    </button>
+                    <button onclick="abrirModalFormulario()" class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2.5 rounded-lg font-semibold shadow transition">
+                        + Registrar Plan de Calidad
+                    </button>
+                </div>
             </div>
 
             <!-- Panel de Filtros -->
@@ -60,78 +65,12 @@
                 </div>
             </div>
 
-
-            <!-- ADMINISTRACIÓN DE REGISTROS POR FECHA Y TURNO -->
-            <section class="bg-white p-4 rounded-lg shadow mb-4 border border-gray-200">
-                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-                    <div>
-                        <h3 class="font-bold text-[#0b4f2f]">Administrar registros de una fecha y turno</h3>
-                        <p class="text-xs text-gray-500 mt-1">Consulta, corrige o elimina exclusivamente los registros seleccionados.</p>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap items-end gap-4 text-sm">
-                    <div>
-                        <label for="admin_fecha" class="block font-bold mb-1">Fecha:</label>
-                        <input type="date" id="admin_fecha" class="border rounded p-2">
-                    </div>
-                    <div>
-                        <label for="admin_turno" class="block font-bold mb-1">Turno:</label>
-                        <select id="admin_turno" class="border rounded p-2">
-                            <option value="Turno 1">Turno 1</option>
-                            <option value="Turno 2">Turno 2</option>
-                            <option value="Turno 3">Turno 3</option>
-                        </select>
-                    </div>
-                    <button id="btn-consultar-admin" type="button" onclick="consultarRegistrosEdicion()"
-                            class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2 rounded font-semibold">
-                        Consultar registros
-                    </button>
-                </div>
-
-                <div id="panel-edicion" class="hidden mt-5">
-                    <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
-                        <div>
-                            <h4 class="font-bold text-[#0b4f2f]">Registros encontrados</h4>
-                            <p id="contador-registros" class="text-sm text-gray-500"></p>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" onclick="guardarEdicionRegistros()"
-                                    class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2 rounded font-semibold">
-                                Guardar cambios
-                            </button>
-                            <button type="button" onclick="confirmarEliminarRegistros()"
-                                    class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded font-semibold">
-                                Eliminar registros
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="overflow-x-auto border rounded-lg">
-                        <table class="w-full text-sm border-collapse">
-                            <thead class="bg-[#0b4f2f] text-white">
-                                <tr>
-                                    <th class="p-2 border">Punto de muestreo</th>
-                                    <th class="p-2 border">Parámetro</th>
-                                    <th class="p-2 border">Especificación</th>
-                                    <th class="p-2 border">Valor registrado (editable)</th>
-                                    <th class="p-2 border">Operador</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabla-edicion-registros">
-                                <tr><td colspan="5" class="p-4 text-center text-gray-500">Seleccione fecha y turno y consulte los registros.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Tabla Matriz Historial (Estilo Excel) -->
+            <!-- Tabla Matriz Historial (Estilo Excel con todo el espacio vertical) -->
             <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-1 flex flex-col">
-                <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-230px)]">
+                <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-180px)]">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold z-20 shadow-md" id="header-matriz">
-                            <!-- Cabecera de triple nivel (Fecha / Horas / Operador) generada dinámicamente -->
+                            <!-- Cabecera generada dinámicamente -->
                         </thead>
                         <tbody id="body-tabla" class="divide-y divide-gray-200 text-gray-800">
                             <tr>
@@ -187,6 +126,72 @@
         </div>
     </div>
 
+    <!-- Modal Administrar / Modificar / Eliminar Turno -->
+    <div id="modalAdministracion" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+                <h3 class="text-lg font-bold">⚙️ Administrar, Modificar o Eliminar Registros por Turno</h3>
+                <button onclick="cerrarModalAdministracion()" class="text-xl font-bold">&times;</button>
+            </div>
+
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap items-end gap-4 text-sm">
+                <div>
+                    <label for="admin_fecha" class="block font-bold mb-1">Fecha:</label>
+                    <input type="date" id="admin_fecha" class="border rounded p-1.5">
+                </div>
+                <div>
+                    <label for="admin_turno" class="block font-bold mb-1">Turno:</label>
+                    <select id="admin_turno" class="border rounded p-1.5">
+                        <option value="Turno 1">Turno 1</option>
+                        <option value="Turno 2">Turno 2</option>
+                        <option value="Turno 3">Turno 3</option>
+                    </select>
+                </div>
+                <button type="button" onclick="consultarRegistrosEdicion()"
+                        class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2 rounded font-semibold shadow">
+                    Consultar registros
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
+                <div class="flex justify-between items-center">
+                    <p id="contador-registros" class="text-sm font-semibold text-gray-600">Seleccione fecha y turno para consultar.</p>
+                </div>
+
+                <div class="overflow-x-auto border rounded-lg max-h-[50vh]">
+                    <table class="w-full text-sm border-collapse">
+                        <thead class="bg-[#0b4f2f] text-white sticky top-0">
+                            <tr>
+                                <th class="p-2 border">Punto de muestreo</th>
+                                <th class="p-2 border">Parámetro</th>
+                                <th class="p-2 border">Especificación</th>
+                                <th class="p-2 border">Valor registrado (editable)</th>
+                                <th class="p-2 border">Operador</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-edicion-registros">
+                            <tr><td colspan="5" class="p-6 text-center text-gray-500">Sin datos cargados.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex justify-between items-center">
+                <button type="button" onclick="confirmarEliminarRegistros()"
+                        class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded font-semibold shadow">
+                    🗑️ Eliminar Turno Completo
+                </button>
+                <div class="space-x-3">
+                    <button onclick="cerrarModalAdministracion()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cerrar</button>
+                    <button type="button" onclick="guardarEdicionRegistros()"
+                            class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold shadow">
+                        Guardar cambios
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const hoyStr = new Date().toISOString().split('T')[0];
 
@@ -195,7 +200,6 @@
         document.getElementById('form_fecha').value = hoyStr;
         document.getElementById('admin_fecha').value = hoyStr;
 
-        // Horas operativas por turno (según el formato Excel)
         const HORAS_TURNO = {
             "Turno 1": ["07:00", "11:00"],
             "Turno 2": ["15:00", "17:00"],
@@ -218,12 +222,10 @@
                 return;
             }
 
-            // Consulta de registros en la BD
             const res = await fetch(`/api/plan-calidad/registros?f_desde=${desde}&f_hasta=${hasta}&turno=${turnoSel}`);
             const responseData = await res.json();
             const registrosBD = responseData.data || [];
 
-            // 1. Extraer Fechas Únicas en orden cronológico
             const fechasUnicas = [...new Set(registrosBD.map(r => r.fecha))].sort();
 
             const headEl = document.getElementById('header-matriz');
@@ -244,7 +246,6 @@
                 return;
             }
 
-            // 2. Construir Encabezados Multinivel de la Matriz (Nivel 1: Fechas, Nivel 2: Horas, Nivel 3: Operadores)
             let mapaColumnas = [];
             let htmlNivel1 = `
                 <tr>
@@ -291,14 +292,12 @@
 
             headEl.innerHTML = htmlNivel1 + htmlNivel2 + htmlNivel3;
 
-            // 3. Crear Mapa de Búsqueda Rápida para los Registros
             let dictBusqueda = {};
             registrosBD.forEach(r => {
                 const key = `${r.zona}|${r.parametro}|${r.fecha}|${r.turno}`;
                 dictBusqueda[key] = r.valor;
             });
 
-            // 4. Agrupar Filas por Parámetros Únicos Existentes en la BD
             let listaFilasUnicas = [];
             let combinacionesVistas = new Set();
 
@@ -315,7 +314,6 @@
                 }
             });
 
-            // 5. Generar Filas de la Matriz
             bodyEl.innerHTML = '';
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
@@ -359,6 +357,18 @@
         function cerrarModalFormulario() {
             document.getElementById('modalForm').classList.add('hidden');
             document.getElementById('modalForm').classList.remove('flex');
+        }
+
+        function abrirModalAdministracion() {
+            document.getElementById('modalAdministracion').classList.remove('hidden');
+            document.getElementById('modalAdministracion').classList.add('flex');
+            document.getElementById('admin_fecha').value = hoyStr;
+            consultarRegistrosEdicion();
+        }
+
+        function cerrarModalAdministracion() {
+            document.getElementById('modalAdministracion').classList.add('hidden');
+            document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
         async function renderizarCamposDinamicos() {
@@ -464,7 +474,6 @@
             }
         }
 
-
         // ==========================================================
         // ADMINISTRAR REGISTROS DEL PLAN DE CALIDAD POR FECHA/TURNO
         // ==========================================================
@@ -484,7 +493,6 @@
         async function consultarRegistrosEdicion() {
             const fecha = document.getElementById('admin_fecha').value;
             const turno = document.getElementById('admin_turno').value;
-            const panel = document.getElementById('panel-edicion');
             const tabla = document.getElementById('tabla-edicion-registros');
             const contador = document.getElementById('contador-registros');
 
@@ -493,9 +501,8 @@
                 return;
             }
 
-            panel.classList.remove('hidden');
             tabla.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
-            contador.textContent = '';
+            contador.textContent = 'Consultando...';
 
             try {
                 const url = `/api/plan-calidad/registros?f_desde=${encodeURIComponent(fecha)}&f_hasta=${encodeURIComponent(fecha)}&turno=${encodeURIComponent(turno)}`;
@@ -573,7 +580,7 @@
                 }
 
                 alert(`Se actualizaron ${resultado.actualizados ?? registros.length} registros correctamente.`);
-                await consultarRegistrosEdicion();
+                cerrarModalAdministracion();
                 await cargarTablaRegistros();
             } catch (error) {
                 alert(error.message);
@@ -592,14 +599,14 @@
             }
 
             const primeraConfirmacion = confirm(
-                `¿ESTÁ SEGURO DE ELIMINAR LOS REGISTROS DEL PLAN DE CALIDAD?\\n\\n` +
-                `Fecha: ${fecha}\\nTurno: ${turno}\\nCantidad: ${cantidad} registros\\n\\n` +
+                `¿ESTÁ SEGURO DE ELIMINAR LOS REGISTROS DEL PLAN DE CALIDAD?\n\n` +
+                `Fecha: ${fecha}\nTurno: ${turno}\nCantidad: ${cantidad} registros\n\n` +
                 'Esta acción no se puede deshacer.'
             );
             if (!primeraConfirmacion) return;
 
             const segundaConfirmacion = confirm(
-                `CONFIRMACIÓN FINAL\\n\\nSe eliminarán definitivamente ${cantidad} registros del ${fecha}, ${turno}.\\n\\n¿Desea continuar?`
+                `CONFIRMACIÓN FINAL\n\nSe eliminarán definitivamente ${cantidad} registros del ${fecha}, ${turno}.\n\n¿Desea continuar?`
             );
             if (!segundaConfirmacion) return;
 
@@ -617,9 +624,7 @@
 
                 alert(`Se eliminaron ${resultado.eliminados ?? cantidad} registros correctamente.`);
                 registrosEdicionActuales = [];
-                document.getElementById('tabla-edicion-registros').innerHTML =
-                    '<tr><td colspan="5" class="p-5 text-center text-gray-500">No existen registros para esta fecha y turno.</td></tr>';
-                document.getElementById('contador-registros').textContent = '0 registros encontrados.';
+                cerrarModalAdministracion();
                 await cargarTablaRegistros();
             } catch (error) {
                 alert(error.message);
