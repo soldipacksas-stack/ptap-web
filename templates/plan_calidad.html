@@ -60,6 +60,72 @@
                 </div>
             </div>
 
+
+            <!-- ADMINISTRACIÓN DE REGISTROS POR FECHA Y TURNO -->
+            <section class="bg-white p-4 rounded-lg shadow mb-4 border border-gray-200">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                    <div>
+                        <h3 class="font-bold text-[#0b4f2f]">Administrar registros de una fecha y turno</h3>
+                        <p class="text-xs text-gray-500 mt-1">Consulta, corrige o elimina exclusivamente los registros seleccionados.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-end gap-4 text-sm">
+                    <div>
+                        <label for="admin_fecha" class="block font-bold mb-1">Fecha:</label>
+                        <input type="date" id="admin_fecha" class="border rounded p-2">
+                    </div>
+                    <div>
+                        <label for="admin_turno" class="block font-bold mb-1">Turno:</label>
+                        <select id="admin_turno" class="border rounded p-2">
+                            <option value="Turno 1">Turno 1</option>
+                            <option value="Turno 2">Turno 2</option>
+                            <option value="Turno 3">Turno 3</option>
+                        </select>
+                    </div>
+                    <button id="btn-consultar-admin" type="button" onclick="consultarRegistrosEdicion()"
+                            class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2 rounded font-semibold">
+                        Consultar registros
+                    </button>
+                </div>
+
+                <div id="panel-edicion" class="hidden mt-5">
+                    <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
+                        <div>
+                            <h4 class="font-bold text-[#0b4f2f]">Registros encontrados</h4>
+                            <p id="contador-registros" class="text-sm text-gray-500"></p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="guardarEdicionRegistros()"
+                                    class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2 rounded font-semibold">
+                                Guardar cambios
+                            </button>
+                            <button type="button" onclick="confirmarEliminarRegistros()"
+                                    class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded font-semibold">
+                                Eliminar registros
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto border rounded-lg">
+                        <table class="w-full text-sm border-collapse">
+                            <thead class="bg-[#0b4f2f] text-white">
+                                <tr>
+                                    <th class="p-2 border">Punto de muestreo</th>
+                                    <th class="p-2 border">Parámetro</th>
+                                    <th class="p-2 border">Especificación</th>
+                                    <th class="p-2 border">Valor registrado (editable)</th>
+                                    <th class="p-2 border">Operador</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabla-edicion-registros">
+                                <tr><td colspan="5" class="p-4 text-center text-gray-500">Seleccione fecha y turno y consulte los registros.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- Tabla Matriz Historial (Estilo Excel) -->
             <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-1 flex flex-col">
                 <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-230px)]">
@@ -127,6 +193,7 @@
         document.getElementById('f_desde').value = hoyStr;
         document.getElementById('f_hasta').value = hoyStr;
         document.getElementById('form_fecha').value = hoyStr;
+        document.getElementById('admin_fecha').value = hoyStr;
 
         // Horas operativas por turno (según el formato Excel)
         const HORAS_TURNO = {
@@ -394,6 +461,169 @@
                 cargarTablaRegistros();
             } else {
                 alert("Ocurrió un error al guardar los datos.");
+            }
+        }
+
+
+        // ==========================================================
+        // ADMINISTRAR REGISTROS DEL PLAN DE CALIDAD POR FECHA/TURNO
+        // ==========================================================
+
+        let registrosEdicionActuales = [];
+
+        function escaparHTML(valor) {
+            return String(valor ?? '').replace(/[&<>"']/g, caracter => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            })[caracter]);
+        }
+
+        async function consultarRegistrosEdicion() {
+            const fecha = document.getElementById('admin_fecha').value;
+            const turno = document.getElementById('admin_turno').value;
+            const panel = document.getElementById('panel-edicion');
+            const tabla = document.getElementById('tabla-edicion-registros');
+            const contador = document.getElementById('contador-registros');
+
+            if (!fecha) {
+                alert('Seleccione una fecha.');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            tabla.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
+            contador.textContent = '';
+
+            try {
+                const url = `/api/plan-calidad/registros?f_desde=${encodeURIComponent(fecha)}&f_hasta=${encodeURIComponent(fecha)}&turno=${encodeURIComponent(turno)}`;
+                const respuesta = await fetch(url);
+                const datos = await respuesta.json();
+
+                if (!respuesta.ok) {
+                    throw new Error(datos.detail || 'No fue posible consultar los registros.');
+                }
+
+                registrosEdicionActuales = Array.isArray(datos.data) ? datos.data : [];
+                contador.textContent = `${registrosEdicionActuales.length} registros encontrados para ${fecha} · ${turno}`;
+
+                if (registrosEdicionActuales.length === 0) {
+                    tabla.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-gray-500">No existen registros para esta fecha y turno.</td></tr>';
+                    return;
+                }
+
+                tabla.innerHTML = registrosEdicionActuales.map(registro => `
+                    <tr class="hover:bg-green-50">
+                        <td class="p-2 border">${escaparHTML(registro.zona)}</td>
+                        <td class="p-2 border">${escaparHTML(registro.parametro)}</td>
+                        <td class="p-2 border text-center">${escaparHTML(registro.limite || '-')}</td>
+                        <td class="p-2 border">
+                            <input type="text"
+                                   class="valor-edicion w-full min-w-[110px] border rounded p-2"
+                                   data-id="${Number(registro.id)}"
+                                   value="${escaparHTML(registro.valor)}"
+                                   aria-label="Valor para ${escaparHTML(registro.parametro)}">
+                        </td>
+                        <td class="p-2 border">${escaparHTML(registro.operador || '-')}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                registrosEdicionActuales = [];
+                tabla.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-600">${escaparHTML(error.message)}</td></tr>`;
+                console.error('Error consultando registros para edición:', error);
+            }
+        }
+
+        async function guardarEdicionRegistros() {
+            const fecha = document.getElementById('admin_fecha').value;
+            const turno = document.getElementById('admin_turno').value;
+            const inputs = document.querySelectorAll('#tabla-edicion-registros .valor-edicion');
+
+            if (!registrosEdicionActuales.length || !inputs.length) {
+                alert('No hay registros para modificar.');
+                return;
+            }
+
+            const registros = Array.from(inputs).map(input => ({
+                id: Number(input.dataset.id),
+                valor: input.value.trim()
+            }));
+
+            if (registros.some(registro => !Number.isInteger(registro.id) || !registro.valor)) {
+                alert('Verifique que todos los registros tengan un valor válido. No se permiten valores vacíos.');
+                return;
+            }
+
+            if (!confirm(`¿Desea guardar los cambios de los registros del ${fecha}, ${turno}?`)) {
+                return;
+            }
+
+            try {
+                const respuesta = await fetch('/api/plan-calidad/editar', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fecha, turno, registros })
+                });
+                const resultado = await respuesta.json();
+
+                if (!respuesta.ok) {
+                    throw new Error(resultado.detail || 'No se pudieron guardar los cambios.');
+                }
+
+                alert(`Se actualizaron ${resultado.actualizados ?? registros.length} registros correctamente.`);
+                await consultarRegistrosEdicion();
+                await cargarTablaRegistros();
+            } catch (error) {
+                alert(error.message);
+                console.error('Error guardando modificaciones:', error);
+            }
+        }
+
+        async function confirmarEliminarRegistros() {
+            const fecha = document.getElementById('admin_fecha').value;
+            const turno = document.getElementById('admin_turno').value;
+            const cantidad = registrosEdicionActuales.length;
+
+            if (!cantidad) {
+                alert('No hay registros para eliminar.');
+                return;
+            }
+
+            const primeraConfirmacion = confirm(
+                `¿ESTÁ SEGURO DE ELIMINAR LOS REGISTROS DEL PLAN DE CALIDAD?\\n\\n` +
+                `Fecha: ${fecha}\\nTurno: ${turno}\\nCantidad: ${cantidad} registros\\n\\n` +
+                'Esta acción no se puede deshacer.'
+            );
+            if (!primeraConfirmacion) return;
+
+            const segundaConfirmacion = confirm(
+                `CONFIRMACIÓN FINAL\\n\\nSe eliminarán definitivamente ${cantidad} registros del ${fecha}, ${turno}.\\n\\n¿Desea continuar?`
+            );
+            if (!segundaConfirmacion) return;
+
+            try {
+                const respuesta = await fetch('/api/plan-calidad/eliminar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fecha, turno })
+                });
+                const resultado = await respuesta.json();
+
+                if (!respuesta.ok) {
+                    throw new Error(resultado.detail || 'No se pudieron eliminar los registros.');
+                }
+
+                alert(`Se eliminaron ${resultado.eliminados ?? cantidad} registros correctamente.`);
+                registrosEdicionActuales = [];
+                document.getElementById('tabla-edicion-registros').innerHTML =
+                    '<tr><td colspan="5" class="p-5 text-center text-gray-500">No existen registros para esta fecha y turno.</td></tr>';
+                document.getElementById('contador-registros').textContent = '0 registros encontrados.';
+                await cargarTablaRegistros();
+            } catch (error) {
+                alert(error.message);
+                console.error('Error eliminando registros:', error);
             }
         }
 
