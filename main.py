@@ -49,6 +49,22 @@ class PayloadGuardarPlan(BaseModel):
     operador: str
     registros: List[ItemRegistro]
 
+
+class ItemEditarRegistro(BaseModel):
+    id: int
+    valor: str
+
+
+class PayloadEditarRegistros(BaseModel):
+    fecha: str
+    turno: str
+    registros: List[ItemEditarRegistro]
+
+
+class PayloadEliminarRegistros(BaseModel):
+    fecha: str
+    turno: str
+
 class PayloadExcepcion(BaseModel):
     fecha: str
     turno: str
@@ -151,6 +167,116 @@ def guardar_excepcion(payload: PayloadExcepcion, db: Session = Depends(get_db)):
     db.add(exc)
     db.commit()
     return {"status": "ok", "message": "Excepción guardada correctamente"}
+
+
+# ==========================================================
+# ADMINISTRACIÓN DE REGISTROS DEL PLAN DE CALIDAD
+# ==========================================================
+
+@app.put("/api/plan-calidad/editar")
+def editar_registros_plan_calidad(
+    payload: PayloadEditarRegistros,
+    db: Session = Depends(get_db)
+):
+    try:
+        datetime.strptime(payload.fecha, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Fecha inválida. Use AAAA-MM-DD.")
+
+    if payload.turno not in ["Turno 1", "Turno 2", "Turno 3"]:
+        raise HTTPException(status_code=400, detail="Turno inválido.")
+
+    if not payload.registros:
+        raise HTTPException(status_code=400, detail="No hay registros para actualizar.")
+
+    ids = [item.id for item in payload.registros]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=400, detail="La solicitud contiene registros duplicados.")
+
+    try:
+        registros_db = db.query(models.RegistroPlanCalidad).filter(
+            models.RegistroPlanCalidad.id.in_(ids),
+            models.RegistroPlanCalidad.fecha == payload.fecha,
+            models.RegistroPlanCalidad.turno == payload.turno
+        ).all()
+
+        encontrados = {registro.id: registro for registro in registros_db}
+        faltantes = set(ids) - set(encontrados)
+        if faltantes:
+            raise HTTPException(
+                status_code=404,
+                detail="Uno o más registros ya no existen o no corresponden a la fecha y turno seleccionados."
+            )
+
+        for item in payload.registros:
+            nuevo_valor = item.valor.strip()
+            if not nuevo_valor:
+                raise HTTPException(status_code=400, detail="Los valores no pueden quedar vacíos.")
+
+            registro = encontrados[item.id]
+            registro.valor = nuevo_valor
+            registro.resultado = (
+                "FUERA DE RANGO"
+                if nuevo_valor.lower() in ["no pasa", "no cumple"]
+                else "Cumple"
+            )
+
+        db.commit()
+        return {
+            "status": "ok",
+            "actualizados": len(payload.registros),
+            "message": "Registros actualizados correctamente."
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar registros: {str(exc)}")
+
+
+@app.post("/api/plan-calidad/eliminar")
+def eliminar_registros_plan_calidad(
+    payload: PayloadEliminarRegistros,
+    db: Session = Depends(get_db)
+):
+    try:
+        datetime.strptime(payload.fecha, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Fecha inválida. Use AAAA-MM-DD.")
+
+    if payload.turno not in ["Turno 1", "Turno 2", "Turno 3"]:
+        raise HTTPException(status_code=400, detail="Turno inválido.")
+
+    try:
+        consulta = db.query(models.RegistroPlanCalidad).filter(
+            models.RegistroPlanCalidad.fecha == payload.fecha,
+            models.RegistroPlanCalidad.turno == payload.turno
+        )
+        cantidad = consulta.count()
+
+        if cantidad == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="No existen registros para esa fecha y turno."
+            )
+
+        consulta.delete(synchronize_session=False)
+        db.commit()
+
+        return {
+            "status": "ok",
+            "eliminados": cantidad,
+            "message": "Registros eliminados correctamente."
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar registros: {str(exc)}")
 
 def sincronizar_excel(payload: PayloadGuardarPlan, registros):
     nombre_archivo = "Bitacora_PTAP.xlsx"
@@ -578,23 +704,3 @@ def guardar_limpieza_uf(payload: PayloadLimpiezaUF):
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-@app.post("/api/plan-calidad/guardar")
-def guardar_plan_calidad(data: PlanCalidadSchema, db: Session = Depends(get_db)):
-    for reg in data.registros:
-        # Validar si cumple con el límite o rango si es numérico, o guardar directo
-        resultado = evaluar_limite(reg.valor, reg.limite) # Tu lógica de validación
-        
-        nuevo_registro = models.RegistroPlanCalidad(
-            fecha=data.fecha,
-            turno=data.turno,
-            operador=data.operador,
-            zona=reg.zona,
-            parametro=reg.parametro,
-            valor=reg.valor,
-            limite=reg.limite,
-            frecuencia=reg.frecuencia, # Si agregaste la columna en base de datos
-            resultado=resultado
-        )
-        db.add(nuevo_registro)
-    db.commit()
-    return {"status": "success"}
