@@ -48,3 +48,18 @@ class RegistroLimpiezaFiltro(Base):
     cloro = Column(String(50), nullable=True)
     turbidez = Column(String(50), nullable=True)
     creado_en = Column(DateTime, default=datetime.now)
+
+class RegistroPlanAccion(Base):
+    __tablename__ = "planes_accion_registros"
+
+    id = Column(Integer, primary_key=True, index=True)
+    fecha = Column(String(10), index=True)
+    turno = Column(String(20), index=True)
+    modulo = Column(String(50), index=True)  # Ej. Plan de Calidad, Limpieza Filtros, etc.
+    zona = Column(String(150), index=True)
+    parametro = Column(String(150), index=True)
+    valor_registrado = Column(String(50))
+    limite_esperado = Column(String(100))
+    descripcion_accion = Column(Text)
+    operador = Column(String(120), index=True)
+    creado_en = Column(DateTime, default=datetime.now)
