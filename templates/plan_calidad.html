@@ -342,9 +342,20 @@
             headEl.innerHTML = htmlNivel1 + htmlNivel2 + htmlNivel3;
 
             let dictBusqueda = {};
+            let tieneMuestrasMultiples = new Set();
+
+            // Mapear los registros preservando Muestra 1 vs Muestra 2
             registrosBD.forEach(r => {
                 let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
-                const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}`;
+                let esM1 = /\(Muestra\s*1\)/i.test(r.parametro);
+                let esM2 = /\(Muestra\s*2\)/i.test(r.parametro);
+
+                if (esM1 || esM2) {
+                    tieneMuestrasMultiples.add(`${r.zona}|${paramLimpio}`);
+                }
+
+                let subKey = esM1 ? 'M1' : (esM2 ? 'M2' : 'GEN');
+                const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}|${subKey}`;
                 dictBusqueda[key] = r.valor;
             });
 
@@ -356,12 +367,18 @@
                 const comboKey = `${r.zona}|${paramLimpio}`;
                 if (!combinacionesVistas.has(comboKey)) {
                     combinacionesVistas.add(comboKey);
+                    
+                    let esDobleMuestra = tieneMuestrasMultiples.has(comboKey) || 
+                                         (r.frecuencia && r.frecuencia.toLowerCase().includes('2 vez')) || 
+                                         (r.frecuencia && r.frecuencia.toLowerCase().includes('2 veces'));
+
                     listaFilasUnicas.push({
                         zona: r.zona,
                         parametroOriginal: r.parametro,
                         parametroLimpio: paramLimpio,
                         limite: r.limite || '-',
-                        frecuencia: r.frecuencia || '1 vez turno'
+                        frecuencia: esDobleMuestra ? '2 veces turno' : (r.frecuencia || '1 vez turno'),
+                        esDobleMuestra: esDobleMuestra
                     });
                 }
             });
@@ -409,31 +426,40 @@
                 `;
 
                 let skipNextCol = 0;
-                mapaColumnas.forEach((col, idx) => {
+                mapaColumnas.forEach((col) => {
                     if (skipNextCol > 0) {
                         skipNextCol--;
-                        return; // Omitir la segunda celda del turno cuando está unificada con colspan="2"
+                        return; // Omitir la segunda columna cuando la primera es de 1 vez por turno (colspan=2)
                     }
 
                     const horasDelTurno = HORAS_TURNO[col.turno];
                     const esPrimeraHora = horasDelTurno && horasDelTurno[0] === col.hora;
-                    const esFrecuenciaUnaVez = item.frecuencia && item.frecuencia.toLowerCase().includes('1 vez turno');
+                    const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
+
+                    const comboKey = `${item.zona}|${item.parametroLimpio}`;
+                    const esDoble = item.esDobleMuestra || tieneMuestrasMultiples.has(comboKey);
 
                     let valMedido = undefined;
-                    const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
-                    valMedido = dictBusqueda[busquedaKey];
 
-                    if (valMedido === undefined) {
-                        const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
-                        if (regGeneral) valMedido = regGeneral.valor;
+                    if (esDoble) {
+                        // Parámetro de 2 muestras por turno
+                        if (esPrimeraHora) {
+                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
+                            if (valMedido === undefined) {
+                                valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
+                            }
+                        } else if (esSegundaHora) {
+                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M2`];
+                        }
+                    } else {
+                        // Parámetro de 1 sola vez por turno
+                        valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
+                        if (valMedido === undefined) {
+                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
+                        }
                     }
 
-                    if (valMedido === undefined && !esFrecuenciaUnaVez) {
-                        const regEspecifico1 = registrosBD.find(r => r.zona === item.zona && r.parametro === `${item.parametroLimpio} (Muestra 1)` && r.fecha === col.fecha && r.turno === col.turno);
-                        if (regEspecifico1) valMedido = regEspecifico1.valor;
-                    }
-
-                    let displayTexto = valMedido !== undefined ? valMedido : 'NA';
+                    let displayTexto = (valMedido !== undefined && valMedido !== null && valMedido !== '') ? valMedido : 'NA';
                     let estilo = 'text-gray-700';
 
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
@@ -444,14 +470,12 @@
                         estilo = 'text-gray-400 italic';
                     }
 
-                    if (esFrecuenciaUnaVez && esPrimeraHora) {
-                        // Unificar celdas con colspan="2" para 1 vez turno
-                        skipNextCol = 1; // Salta la segunda hora de este turno
+                    if (!esDoble && esPrimeraHora) {
+                        // Parámetro de 1 sola vez por turno -> Celda unificada con colspan="2"
+                        skipNextCol = 1;
                         filaHTML += `<td colspan="2" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
-                    } else if (esFrecuenciaUnaVez && !esPrimeraHora) {
-                        // Si por alguna razón evaluamos la segunda hora directamente
-                        return;
                     } else {
+                        // Parámetro de 2 muestras -> Celdas independientes
                         filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
                     }
                 });
