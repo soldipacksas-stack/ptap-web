@@ -462,10 +462,13 @@
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                         estilo = 'bg-red-100 text-red-700 font-bold';
                     } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
-                        let numeros = item.limite.match(/-?\d+(\.\d+)?/g);
-                        if (numeros && numeros.length >= 2) {
-                            let min = parseFloat(numeros[0]);
-                            let max = parseFloat(numeros[1]);
+                        // Reemplazar comas por puntos para leer correctamente los decimales en español (ej: "6,5" -> "6.5")
+                        let limiteLimpio = item.limite.replace(/,/g, '.');
+                        let partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
+
+                        if (partesLimites && partesLimites.length >= 2) {
+                            let min = parseFloat(partesLimites[0]);
+                            let max = parseFloat(partesLimites[1]);
                             let numVal = parseFloat(displayTexto);
                             if (numVal < min || numVal > max) {
                                 estilo = 'bg-red-100 text-red-700 font-bold';
@@ -526,11 +529,12 @@
             if (isNaN(valor)) return;
 
             const limiteStr = input.dataset.limite || '';
-            const numeros = limiteStr.match(/-?\d+(\.\d+)?/g);
+            let limiteLimpio = limiteStr.replace(/,/g, '.');
+            const partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
 
-            if (numeros && numeros.length >= 2) {
-                const min = parseFloat(numeros[0]);
-                const max = parseFloat(numeros[1]);
+            if (partesLimites && partesLimites.length >= 2) {
+                const min = parseFloat(partesLimites[0]);
+                const max = parseFloat(partesLimites[1]);
 
                 if (valor < min || valor > max) {
                     const confirmar = confirm(`⚠️ ADVERTENCIA: El valor ingresado (${valor}) está FUERA DE LOS LÍMITES de la especificación (${limiteStr}).\n\n¿Desea corregirlo?\n\n• Pulse [Aceptar] para corregir el valor.\n• Pulse [Cancelar] para guardarlo de todos modos (quedará registrado como fuera de rango en rojo).`);
