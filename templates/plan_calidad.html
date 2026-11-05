@@ -16,10 +16,9 @@
         .table-sticky-container table {
             border-collapse: separate;
             border-spacing: 0;
-            width: max-content; /* Permite que la tabla crezca horizontalmente con las fechas */
+            width: max-content;
         }
 
-        /* Celdas fijas izquierdas (Punto, Parámetro, Especificación, Frecuencia) */
         .table-sticky-container th.sticky-col,
         .table-sticky-container td.sticky-col {
             position: sticky;
@@ -29,20 +28,17 @@
             word-break: break-word;
         }
 
-        /* Cabeceras fijas izquierdas necesitan z-index superior para sobreponerse al hacer scroll */
         .table-sticky-container thead th.sticky-col {
             z-index: 30;
             background-color: #0b4f2f !important;
             white-space: normal !important;
         }
 
-        /* Posicionamiento acumulativo y anchos óptimos ajustados */
         .col-punto { left: 0px; min-width: 190px; max-width: 190px; }
         .col-parametro { left: 190px; min-width: 170px; max-width: 170px; }
         .col-especificacion { left: 360px; min-width: 100px; max-width: 100px; }
         .col-frecuencia { left: 460px; min-width: 105px; max-width: 105px; }
 
-        /* Sombra sutil a la derecha de la última columna fija para separar visualmente el scroll */
         .col-frecuencia::after {
             content: '';
             position: absolute;
@@ -54,7 +50,6 @@
             pointer-events: none;
         }
 
-        /* Fondo alternado en filas para las celdas fijas */
         .table-sticky-container tbody tr:hover td.sticky-col {
             background-color: #f0fdf4 !important;
         }
@@ -139,13 +134,13 @@
 
     <!-- Modal Formulario de Registro -->
     <div id="modalForm" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center flex-shrink-0">
                 <h3 class="text-lg font-bold">📝 Registrar Mediciones Plan de Calidad</h3>
                 <button onclick="cerrarModalFormulario()" class="text-xl font-bold">&times;</button>
             </div>
             
-            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-4 text-sm">
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-4 text-sm flex-shrink-0">
                 <div>
                     <label class="block font-bold">Fecha:</label>
                     <input type="date" id="form_fecha" class="border rounded p-1" onchange="renderizarCamposDinamicos()">
@@ -169,13 +164,13 @@
             </div>
 
             <!-- Campos dinámicos del Plan -->
-            <div id="contenedor-parametros" class="p-6 overflow-y-auto space-y-6 flex-1">
+            <div id="contenedor-parametros" class="p-6 overflow-y-auto space-y-6 flex-1 bg-white">
                 <!-- Se llena mediante JS según fecha y turno -->
             </div>
 
-            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
-                <button onclick="cerrarModalFormulario()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
-                <button onclick="enviarFormulario()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Mediciones</button>
+            <div class="p-4 border-t bg-gray-100 flex justify-end space-x-3 flex-shrink-0">
+                <button onclick="cerrarModalFormulario()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold hover:bg-gray-500 transition">Cancelar</button>
+                <button onclick="enviarFormulario()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold shadow transition">Guardar Mediciones</button>
             </div>
         </div>
     </div>
@@ -183,12 +178,12 @@
     <!-- Modal Administrar / Modificar / Eliminar Turno -->
     <div id="modalAdministracion" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center flex-shrink-0">
                 <h3 class="text-lg font-bold">⚙️ Administrar, Modificar o Eliminar Registros por Turno</h3>
                 <button onclick="cerrarModalAdministracion()" class="text-xl font-bold">&times;</button>
             </div>
 
-            <div class="p-4 border-b bg-gray-50 flex flex-wrap items-end gap-4 text-sm">
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap items-end gap-4 text-sm flex-shrink-0">
                 <div>
                     <label for="admin_fecha" class="block font-bold mb-1">Fecha:</label>
                     <input type="date" id="admin_fecha" class="border rounded p-1.5">
@@ -230,7 +225,7 @@
                 </div>
             </div>
 
-            <div class="p-4 border-t bg-gray-50 flex justify-between items-center">
+            <div class="p-4 border-t bg-gray-50 flex justify-between items-center flex-shrink-0">
                 <button type="button" onclick="confirmarEliminarRegistros()"
                         class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded font-semibold shadow">
                     🗑️ Eliminar Turno Completo
@@ -371,7 +366,6 @@
                 }
             });
 
-            // Orden personalizado según el Excel
             const ordenPuntos = [
                 "Entrada Agua Potable",
                 "Agua potable para Servicios Generales",
@@ -398,26 +392,13 @@
             listaFilasUnicas.sort((a, b) => {
                 let indexA = ordenPuntos.indexOf(a.zona);
                 let indexB = ordenPuntos.indexOf(b.zona);
-                
-                if (indexA === -1) indexA = 999;
-                if (indexB === -1) indexB = 999;
-                
-                if (indexA !== indexB) {
-                    return indexA - indexB;
-                }
-                return a.parametroLimpio.localeCompare(b.parametroLimpio);
-            });
-
-            bodyEl.innerHTML = '';
-            listaFilasUnicas.sort((a, b) => {
-                let indexA = ordenPuntos.indexOf(a.zona);
-                let indexB = ordenPuntos.indexOf(b.zona);
                 if (indexA === -1) indexA = 999;
                 if (indexB === -1) indexB = 999;
                 if (indexA !== indexB) return indexA - indexB;
                 return a.parametroLimpio.localeCompare(b.parametroLimpio);
             });
 
+            bodyEl.innerHTML = '';
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
                     <tr class="hover:bg-green-50/50 transition">
@@ -427,34 +408,31 @@
                         <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                 `;
 
-                // Agrupar las columnas por cada turno de la fecha para manejar si es 1 vez por turno (duplicar/fusionar valor en ambas horas)
                 mapaColumnas.forEach((col, idx) => {
-                    const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
-                    let valMedido = dictBusqueda[busquedaKey];
-
-                    // Si es un parámetro de 1 vez por turno y la columna es la segunda hora del turno, replicar el valor o dejarlo limpio (según Excel)
                     const horasDelTurno = HORAS_TURNO[col.turno];
                     const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
                     const esFrecuenciaUnaVez = item.frecuencia && item.frecuencia.toLowerCase().includes('1 vez turno');
 
-                    if (valMedido === undefined && esFrecuenciaUnaVez && esSegundaHora) {
-                        // Buscar si existe valor en la primera hora del mismo turno para replicarlo visualmente como en Excel
-                        const busquedaKeyPrimera = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
-                        // O bien, si se guarda en Muestra 1, replicamos el valor en la celda de Muestra 2 para que ambas columnas del turno muestren el dato (como pH o Agua Fuente)
-                    }
+                    let valMedido = undefined;
 
-                    // Si el parámetro NO es de muestra 1/2 y solo tiene un valor guardado por turno, replicarlo en ambas horas del turno para que luzca como en Excel
-                    if (valMedido === undefined) {
-                        // Intentar buscar si hay un registro general guardado sin la etiqueta de muestra
-                        const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
-                        if (regGeneral) valMedido = regGeneral.valor;
-                    }
+                    if (esFrecuenciaUnaVez && esSegundaHora) {
+                        // Para parámetros de 1 vez por turno, la segunda hora del turno no lleva valor (queda limpia como en Excel)
+                        valMedido = undefined;
+                    } else {
+                        // Buscar valor normal para la celda
+                        const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
+                        valMedido = dictBusqueda[busquedaKey];
 
-                    // Si aún está undefined, intentemos buscar específicamente Muestra 1 para la primera hora y Muestra 2 para la segunda hora
-                    if (valMedido === undefined) {
-                        const paramBusquedaEspecifica = esSegundaHora ? `${item.parametroLimpio} (Muestra 2)` : `${item.parametroLimpio} (Muestra 1)`;
-                        const regEspecifico = registrosBD.find(r => r.zona === item.zona && r.parametro === paramBusquedaEspecifica && r.fecha === col.fecha && r.turno === col.turno);
-                        if (regEspecifico) valMedido = regEspecifico.valor;
+                        if (valMedido === undefined) {
+                            const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
+                            if (regGeneral) valMedido = regGeneral.valor;
+                        }
+
+                        if (valMedido === undefined) {
+                            const paramBusquedaEspecifica = esSegundaHora ? `${item.parametroLimpio} (Muestra 2)` : `${item.parametroLimpio} (Muestra 1)`;
+                            const regEspecifico = registrosBD.find(r => r.zona === item.zona && r.parametro === paramBusquedaEspecifica && r.fecha === col.fecha && r.turno === col.turno);
+                            if (regEspecifico) valMedido = regEspecifico.valor;
+                        }
                     }
 
                     let displayTexto = valMedido !== undefined ? valMedido : 'NA';
@@ -468,14 +446,9 @@
                         estilo = 'text-gray-400 italic';
                     }
 
-                    // Si es de 1 vez por turno y es la segunda celda del turno, si el usuario prefiere celda vacía o replicada, aquí aplicamos la lógica limpia
-                    if (esFrecuenciaUnaVez && esSegundaHora && valMedido === undefined) {
-                        // Si en la primera hora hay valor, replicarlo para cubrir ambas celdas del turno como en tu imagen de Excel
-                        const valPrimeraHora = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`];
-                        if (valPrimeraHora !== undefined) {
-                            displayTexto = valPrimeraHora;
-                            estilo = 'font-semibold text-gray-900';
-                        }
+                    if (esFrecuenciaUnaVez && esSegundaHora) {
+                        displayTexto = '-';
+                        estilo = 'text-gray-400 italic';
                     }
 
                     filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
@@ -777,7 +750,6 @@
             }
         }
 
-        // Cargar al iniciar
         window.onload = () => {
             cargarTablaRegistros();
         };
