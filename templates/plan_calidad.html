@@ -520,7 +520,6 @@
             document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
-        // Validación en tiempo real y apertura automática del campo de Plan de Acción
         function validarCasillaMedicion(input) {
             const valStr = input.value.trim();
             const containerId = input.dataset.containerId;
@@ -548,12 +547,12 @@
                 if (valor < min || valor > max) {
                     input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
                     if (container) {
-                        container.classList.remove('hidden'); // Muestra la casilla de plan de acción
+                        container.classList.remove('hidden');
                     }
                 } else {
                     input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
                     if (container) {
-                        container.classList.add('hidden'); // Oculta si el valor vuelve a estar en rango
+                        container.classList.add('hidden');
                         const txtArea = container.querySelector('.input-plan-accion');
                         if (txtArea) txtArea.value = '';
                     }
@@ -622,7 +621,6 @@
                                     ${inputHtml}
                                     <span class="text-[10px] text-gray-500 italic whitespace-nowrap">${item.frecuencia} · Límite: ${item.limite}</span>
                                 </div>
-                                <!-- Casilla dinámica para el Plan de Acción -->
                                 <div id="${uniqueId}" class="hidden mt-1 p-2 bg-red-50 border border-red-300 rounded-md">
                                     <label class="block text-[11px] font-bold text-red-700 mb-1">⚠️ Valor fuera de rango. Plan de acción / Observación:</label>
                                     <textarea class="input-plan-accion w-full border border-red-300 rounded p-1.5 text-xs bg-white" placeholder="Describa la acción correctiva realizada..."></textarea>
@@ -640,6 +638,28 @@
         }
 
         async function enviarFormulario() {
+            const fecha = document.getElementById('form_fecha').value;
+            const turno = document.getElementById('form_turno').value;
+            const operador = document.getElementById('form_operador').value;
+
+            // VALIDACIÓN DE SEGURIDAD: Verificar si ya existen registros guardados para esta fecha y turno
+            try {
+                const resCheck = await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${turno}`);
+                const dataCheck = await resCheck.json();
+                
+                if (dataCheck.data && dataCheck.data.length > 0) {
+                    alert(
+                        `🚫 REGISTRO BLOQUEADO\n\n` +
+                        `Ya existen mediciones registradas para la fecha ${fecha} en el ${turno}.\n\n` +
+                        `• Por favor verifique si ha seleccionado la FECHA y TURNO correctos.\n` +
+                        `• Si lo que desea es modificar un dato ya ingresado, debe ir a la opción "⚙️ Administrar".`
+                    );
+                    return; // Cancela el envío por completo
+                }
+            } catch (e) {
+                console.error("Error al verificar registros existentes:", e);
+            }
+
             const inputs = document.querySelectorAll('.input-medida');
             const registros = [];
 
@@ -672,12 +692,7 @@
                 return;
             }
 
-            const payload = {
-                fecha: document.getElementById('form_fecha').value,
-                turno: document.getElementById('form_turno').value,
-                operador: document.getElementById('form_operador').value,
-                registros: registros
-            };
+            const payload = { fecha, turno, operador, registros };
 
             const response = await fetch('/api/plan-calidad/guardar', {
                 method: 'POST',
