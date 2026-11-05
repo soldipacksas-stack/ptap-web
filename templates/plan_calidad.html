@@ -5,6 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plan de Calidad PTAP - ZFCCC</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilos personalizados para fijar las primeras 4 columnas de la matriz */
+        .table-sticky-container {
+            max-height: calc(100vh - 180px);
+            overflow: auto;
+            position: relative;
+        }
+
+        .table-sticky-container table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: max-content; /* Permite que la tabla crezca horizontalmente con las fechas */
+        }
+
+        /* Celdas fijas izquierdas (Punto, Parámetro, Especificación, Frecuencia) */
+        .table-sticky-container th.sticky-col,
+        .table-sticky-container td.sticky-col {
+            position: sticky;
+            z-index: 10;
+            background-color: #ffffff;
+        }
+
+        /* Cabeceras fijas izquierdas necesitan z-index superior para sobreponerse al hacer scroll vertical/horizontal */
+        .table-sticky-container thead th.sticky-col {
+            z-index: 30;
+            background-color: #0b4f2f !important;
+        }
+
+        /* Posicionamiento acumulativo izquierda para las 4 primeras columnas */
+        .col-punto { left: 0px; min-width: 140px; max-width: 150px; }
+        .col-parametro { left: 140px; min-width: 160px; max-width: 180px; }
+        .col-especificacion { left: 300px; min-width: 90px; max-width: 100px; }
+        .col-frecuencia { left: 390px; min-width: 90px; max-width: 100px; }
+
+        /* Sombra sutil a la derecha de la última columna fija para separar visualmente el scroll */
+        .col-frecuencia::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -5px;
+            bottom: 0;
+            width: 5px;
+            box-shadow: inset 4px 0 4px -4px rgba(0,0,0,0.15);
+            pointer-events: none;
+        }
+
+        /* Fondo alternado en filas para las celdas fijas */
+        .table-sticky-container tbody tr:hover td.sticky-col {
+            background-color: #f0fdf4 !important;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div class="flex h-screen overflow-hidden">
@@ -65,11 +116,11 @@
                 </div>
             </div>
 
-            <!-- Tabla Matriz Historial (Estilo Excel con todo el espacio vertical) -->
+            <!-- Tabla Matriz Historial -->
             <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-1 flex flex-col">
-                <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-180px)]">
-                    <table class="w-full text-left text-xs border-collapse">
-                        <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold z-20 shadow-md" id="header-matriz">
+                <div class="table-sticky-container">
+                    <table class="text-left text-xs border-collapse">
+                        <thead class="bg-[#0b4f2f] text-white uppercase font-semibold shadow-md" id="header-matriz">
                             <!-- Cabecera generada dinámicamente -->
                         </thead>
                         <tbody id="body-tabla" class="divide-y divide-gray-200 text-gray-800">
@@ -234,10 +285,10 @@
             if (fechasUnicas.length === 0) {
                 headEl.innerHTML = `
                     <tr>
-                        <th class="p-2 border border-[#2c6e4b]">Punto Muestreo</th>
-                        <th class="p-2 border border-[#2c6e4b]">Parámetro</th>
-                        <th class="p-2 border border-[#2c6e4b]">Especificación</th>
-                        <th class="p-2 border border-[#2c6e4b]">Frecuencia</th>
+                        <th class="p-2 border border-[#2c6e4b] sticky-col col-punto">Punto Muestreo</th>
+                        <th class="p-2 border border-[#2c6e4b] sticky-col col-parametro">Parámetro</th>
+                        <th class="p-2 border border-[#2c6e4b] sticky-col col-especificacion">Especificación</th>
+                        <th class="p-2 border border-[#2c6e4b] sticky-col col-frecuencia">Frecuencia</th>
                     </tr>`;
                 bodyEl.innerHTML = `
                     <tr>
@@ -249,10 +300,10 @@
             let mapaColumnas = [];
             let htmlNivel1 = `
                 <tr>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white min-w-[170px] align-bottom">Punto Muestreo</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white min-w-[190px] align-bottom">Parámetro</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white min-w-[110px] align-bottom">Especificación</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white min-w-[120px] align-bottom">Frecuencia</th>
+                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-punto">Punto Muestreo</th>
+                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-parametro">Parámetro</th>
+                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-especificacion">Especificación</th>
+                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-frecuencia">Frecuencia</th>
             `;
             let htmlNivel2 = `<tr>`;
             let htmlNivel3 = `<tr>`;
@@ -318,10 +369,10 @@
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
                     <tr class="hover:bg-green-50/50 transition">
-                        <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50/80">${item.zona}</td>
-                        <td class="p-2 border border-gray-200 font-medium">${item.parametro}</td>
-                        <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600">${item.limite}</td>
-                        <td class="p-2 border border-gray-200 text-xs text-gray-500">${item.frecuencia}</td>
+                        <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50 sticky-col col-punto truncate" title="${item.zona}">${item.zona}</td>
+                        <td class="p-2 border border-gray-200 font-medium bg-gray-50 sticky-col col-parametro truncate" title="${item.parametro}">${item.parametro}</td>
+                        <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600 bg-gray-50 sticky-col col-especificacion truncate" title="${item.limite}">${item.limite}</td>
+                        <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia truncate" title="${item.frecuencia}">${item.frecuencia}</td>
                 `;
 
                 mapaColumnas.forEach(col => {
@@ -474,10 +525,6 @@
             }
         }
 
-        // ==========================================================
-        // ADMINISTRAR REGISTROS DEL PLAN DE CALIDAD POR FECHA/TURNO
-        // ==========================================================
-
         let registrosEdicionActuales = [];
 
         function escaparHTML(valor) {
@@ -623,7 +670,6 @@
                 }
 
                 alert(`Se eliminaron ${resultado.eliminados ?? cantidad} registros correctamente.`);
-                registrosEdicionActuales = [];
                 cerrarModalAdministracion();
                 await cargarTablaRegistros();
             } catch (error) {
@@ -632,7 +678,10 @@
             }
         }
 
-        cargarTablaRegistros();
+        // Cargar al iniciar
+        window.onload = () => {
+            cargarTablaRegistros();
+        };
     </script>
 </body>
 </html>
