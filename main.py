@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Any
 import openpyxl
 import os
 
@@ -40,8 +40,8 @@ MAESTRA_PLAN_CALIDAD = [('Entrada Agua Potable', 'Agua Fuente (Río)', 'Turno', 
 class ItemRegistro(BaseModel):
     zona: str
     parametro: str
-    valor: str
-    limite: str
+    valor: Any  # <--- MODIFICADO: Permite recibir flexibilidad de tipos y evita el error 422
+    limite: Optional[str] = "-"
 
 class PayloadGuardarPlan(BaseModel):
     fecha: str
@@ -52,7 +52,7 @@ class PayloadGuardarPlan(BaseModel):
 
 class ItemEditarRegistro(BaseModel):
     id: int
-    valor: str
+    valor: Any  # <--- MODIFICADO: Flexible para evitar errores 422 en la edición
 
 
 class PayloadEditarRegistros(BaseModel):
@@ -124,7 +124,7 @@ def consultar_registros(
 def guardar_plan_calidad(payload: PayloadGuardarPlan, db: Session = Depends(get_db)):
     nuevos_modelos = []
     for item in payload.registros:
-        val = item.valor.strip()
+        val = str(item.valor).strip() if item.valor is not None else ""
         if not val:
             continue
         
@@ -140,7 +140,7 @@ def guardar_plan_calidad(payload: PayloadGuardarPlan, db: Session = Depends(get_
             parametro=item.parametro,
             valor=val,
             resultado=resultado,
-            limite=item.limite
+            limite=item.limite if item.limite else "-"
         )
         nuevos_modelos.append(reg)
 
@@ -209,7 +209,7 @@ def editar_registros_plan_calidad(
             )
 
         for item in payload.registros:
-            nuevo_valor = item.valor.strip()
+            nuevo_valor = str(item.valor).strip() if item.valor is not None else ""
             if not nuevo_valor:
                 raise HTTPException(status_code=400, detail="Los valores no pueden quedar vacíos.")
 
