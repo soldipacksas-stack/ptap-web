@@ -705,3 +705,45 @@ def guardar_limpieza_uf(payload: PayloadLimpiezaUF):
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- MÓDULO: PLANES DE ACCIÓN ---
+
+class PayloadPlanAccion(BaseModel):
+    fecha: str
+    turno: str
+    modulo: str
+    zona: str
+    parametro: str
+    valor_registrado: str
+    limite_esperado: str
+    descripcion_accion: str
+    operador: str
+
+@app.get("/planes-accion", response_class=HTMLResponse)
+def vista_planes_accion(request: Request):
+    return templates.TemplateResponse(request, "planes_accion.html", {
+        "request": request,
+        "operadores": OPERADORES_PTAP
+    })
+
+@app.get("/api/planes-accion/registros")
+def consultar_planes_accion(db: Session = Depends(get_db)):
+    registros = db.query(models.RegistroPlanAccion).order_by(models.RegistroPlanAccion.id.desc()).all()
+    return {"data": registros}
+
+@app.post("/api/planes-accion/guardar")
+def guardar_plan_accion(payload: PayloadPlanAccion, db: Session = Depends(get_db)):
+    nuevo = models.RegistroPlanAccion(
+        fecha=payload.fecha,
+        turno=payload.turno,
+        modulo=payload.modulo,
+        zona=payload.zona,
+        parametro=payload.parametro,
+        valor_registrado=payload.valor_registrado,
+        limite_esperado=payload.limite_esperado,
+        descripcion_accion=payload.descripcion_accion,
+        operador=payload.operador
+    )
+    db.add(nuevo)
+    db.commit()
+    return {"status": "ok", "message": "Plan de acción registrado correctamente."}
