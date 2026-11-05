@@ -530,14 +530,33 @@
             document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
+        function establecerNA(btn) {
+            const container = btn.closest('.bg-white');
+            const input = container.querySelector('.input-medida');
+            if (!input) return;
+
+            if (input.tagName === 'SELECT') {
+                input.value = 'N/A';
+            } else {
+                input.type = 'text';
+                input.value = 'NA';
+            }
+            // Ocultar alerta de fuera de rango si estuviera abierta
+            const containerId = input.dataset.containerId;
+            const alertContainer = document.getElementById(containerId);
+            if (alertContainer) alertContainer.classList.add('hidden');
+            input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+        }
+
         function validarCasillaMedicion(input) {
             const valStr = input.value.trim();
             const containerId = input.dataset.containerId;
             const container = document.getElementById(containerId);
             const paramName = (input.dataset.param || '').toLowerCase();
 
-            if (!valStr) {
+            if (!valStr || valStr.toUpperCase() === 'NA' || valStr.toUpperCase() === 'N/A') {
                 if (container) container.classList.add('hidden');
+                input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
                 return;
             }
 
@@ -641,13 +660,17 @@
                         let inputHtml = (esSensorial || esEstado) ?
                             `<select ${atributos} class="input-medida border rounded p-2 text-sm w-full">
                                 <option value="">Seleccione...</option>
+                                <option value="N/A">N/A (No aplica)</option>
                                 ${esEstado ? '<option value="Cumple">Cumple</option><option value="No cumple">No cumple</option>' : '<option value="Pasa">Pasa</option><option value="No pasa">No pasa</option>'}
                             </select>` :
                             `<input type="number" step="any" ${atributos} oninput="validarCasillaMedicion(this)" class="input-medida border rounded p-2 text-sm w-full" placeholder="Ingrese medición">`;
 
                         card += `
-                            <div class="bg-white p-3 rounded border shadow-sm">
-                                <label class="block font-bold text-xs text-gray-700 mb-1">${nombreParametroForm}</label>
+                            <div class="bg-white p-3 rounded border shadow-sm relative">
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="block font-bold text-xs text-gray-700">${nombreParametroForm}</label>
+                                    <button type="button" onclick="establecerNA(this)" class="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded font-bold transition">N/A</button>
+                                </div>
                                 <div class="flex items-center space-x-2">
                                     ${inputHtml}
                                     <span class="text-xs text-gray-500 whitespace-nowrap">${limiteTextoForm}</span>
@@ -677,9 +700,10 @@
             tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
 
             try {
-                const res = await fetch(`/api/plan-calidad/registros-turno?fecha=${fecha}&turno=${turno}`);
+                const res = await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${turno}`);
                 const data = await res.json();
-                const registros = data.data || [];
+                const todosRegistros = data.data || [];
+                const registros = todosRegistros.filter(r => r.fecha === fecha && r.turno === turno);
 
                 if (registros.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 italic">No existen registros para esta fecha y turno.</td></tr>';
@@ -690,7 +714,7 @@
                 contadorEl.textContent = `${registros.length} registros encontrados.`;
                 tbody.innerHTML = '';
 
-                registros.forEach((r, idx) => {
+                registros.forEach((r) => {
                     tbody.innerHTML += `
                         <tr class="border-b">
                             <td class="p-2 border">${r.zona}</td>
@@ -778,13 +802,21 @@
 
             const inputs = document.querySelectorAll('.input-medida');
             let mediciones = [];
+            let camposVacios = [];
 
             inputs.forEach(inp => {
+                const valor = inp.value.trim();
                 const zona = inp.dataset.zona;
                 const parametro = inp.dataset.param;
+
+                // Validar si el campo quedó completamente vacío
+                if (!valor) {
+                    camposVacios.push(`• [${zona}] ${parametro}`);
+                    return;
+                }
+
                 const limite = inp.dataset.limite;
                 const frecuencia = inp.dataset.frecuencia;
-                const valor = inp.value.trim();
                 
                 let planAccion = '';
                 const containerId = inp.dataset.containerId;
@@ -805,6 +837,12 @@
                     plan_accion: planAccion
                 });
             });
+
+            // Si hay campos vacíos, alertar al usuario detallando cuáles son
+            if (camposVacios.length > 0) {
+                alert("⚠️ Los siguientes campos obligatorios están vacíos y deben ser diligenciados o marcados como N/A:\n\n" + camposVacios.join("\n"));
+                return;
+            }
 
             const payload = {
                 fecha,
