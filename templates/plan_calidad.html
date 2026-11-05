@@ -462,20 +462,30 @@
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                         estilo = 'bg-red-100 text-red-700 font-bold';
                     } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
-                        let limiteLimpio = item.limite.replace(/,/g, '.');
-                        let partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
-
-                        if (partesLimites && partesLimites.length >= 2) {
-                            let min = parseFloat(partesLimites[0]);
-                            let max = parseFloat(partesLimites[1]);
+                        // Verificación específica para intensidades UV (límite > 25)
+                        if (item.parametroLimpio.toLowerCase().includes('intensidad') && item.parametroLimpio.toLowerCase().includes('uv')) {
                             let numVal = parseFloat(displayTexto);
-                            if (numVal < min || numVal > max) {
+                            if (numVal <= 25) {
                                 estilo = 'bg-red-100 text-red-700 font-bold';
                             } else {
                                 estilo = 'font-semibold text-gray-900';
                             }
                         } else {
-                            estilo = 'font-semibold text-gray-900';
+                            let limiteLimpio = item.limite.replace(/,/g, '.');
+                            let partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
+
+                            if (partesLimites && partesLimites.length >= 2) {
+                                let min = parseFloat(partesLimites[0]);
+                                let max = parseFloat(partesLimites[1]);
+                                let numVal = parseFloat(displayTexto);
+                                if (numVal < min || numVal > max) {
+                                    estilo = 'bg-red-100 text-red-700 font-bold';
+                                } else {
+                                    estilo = 'font-semibold text-gray-900';
+                                }
+                            } else {
+                                estilo = 'font-semibold text-gray-900';
+                            }
                         }
                     } else if (displayTexto !== 'NA') {
                         estilo = 'font-semibold text-gray-900';
@@ -524,6 +534,7 @@
             const valStr = input.value.trim();
             const containerId = input.dataset.containerId;
             const container = document.getElementById(containerId);
+            const paramName = (input.dataset.param || '').toLowerCase();
 
             if (!valStr) {
                 if (container) container.classList.add('hidden');
@@ -537,6 +548,23 @@
             }
 
             const limiteStr = input.dataset.limite || '';
+
+            // Validación específica para intensidades de lámparas UV (> 25)
+            if (paramName.includes('intensidad') && paramName.includes('uv')) {
+                if (valor <= 25) {
+                    input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    if (container) container.classList.remove('hidden');
+                } else {
+                    input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    if (container) {
+                        container.classList.add('hidden');
+                        const txtArea = container.querySelector('.input-plan-accion');
+                        if (txtArea) txtArea.value = '';
+                    }
+                }
+                return;
+            }
+
             let limiteLimpio = limiteStr.replace(/,/g, '.');
             const partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
 
@@ -595,6 +623,7 @@
                         const uniqueId = `pa_container_${contadorIdx}`;
                         const esSensorial = item.tipo === "sensorial";
                         const esEstado = item.tipo === "estado";
+                        const esUV = item.param.toLowerCase().includes('intensidad') && item.param.toLowerCase().includes('uv');
 
                         let nombreParametroForm = item.param;
                         if (item.param.includes("(Muestra 1)")) {
@@ -607,23 +636,25 @@
 
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}" data-container-id="${uniqueId}"`;
                         
+                        let limiteTextoForm = esUV ? "Diario · Límite: > 25" : `Diario · Límite: ${item.limite}`;
+
                         let inputHtml = (esSensorial || esEstado) ?
                             `<select ${atributos} class="input-medida border rounded p-2 text-sm w-full">
                                 <option value="">Seleccione...</option>
                                 ${esEstado ? '<option value="Cumple">Cumple</option><option value="No cumple">No cumple</option>' : '<option value="Pasa">Pasa</option><option value="No pasa">No pasa</option>'}
                             </select>` :
-                            `<input type="number" step="any" ${atributos} placeholder="Ingrese medición" oninput="validarCasillaMedicion(this)" class="input-medida border rounded p-2 text-sm w-full">`;
+                            `<input type="number" step="any" ${atributos} oninput="validarCasillaMedicion(this)" class="input-medida border rounded p-2 text-sm w-full" placeholder="Ingrese medición">`;
 
                         card += `
-                            <div class="flex flex-col space-y-1">
-                                <label class="text-xs font-semibold text-gray-700">${nombreParametroForm}</label>
+                            <div class="bg-white p-3 rounded border shadow-sm">
+                                <label class="block font-bold text-xs text-gray-700 mb-1">${nombreParametroForm}</label>
                                 <div class="flex items-center space-x-2">
                                     ${inputHtml}
-                                    <span class="text-[10px] text-gray-500 italic whitespace-nowrap">${item.frecuencia} · Límite: ${item.limite}</span>
+                                    <span class="text-xs text-gray-500 whitespace-nowrap">${limiteTextoForm}</span>
                                 </div>
-                                <div id="${uniqueId}" class="hidden mt-1 p-2 bg-red-50 border border-red-300 rounded-md">
-                                    <label class="block text-[11px] font-bold text-red-700 mb-1">⚠️ Valor fuera de rango. Plan de acción / Observación:</label>
-                                    <textarea class="input-plan-accion w-full border border-red-300 rounded p-1.5 text-xs bg-white" placeholder="Describa la acción correctiva realizada..."></textarea>
+                                <div id="${uniqueId}" class="hidden mt-2 p-2 bg-red-50 border border-red-200 rounded">
+                                    <label class="block text-xs font-bold text-red-700 mb-1">⚠️ Valor fuera de rango. Plan de acción / Observación:</label>
+                                    <textarea class="input-plan-accion w-full text-xs border border-red-300 rounded p-1" rows="2" placeholder="Describa la acción correctiva realizada..."></textarea>
                                 </div>
                             </div>
                         `;
@@ -632,8 +663,111 @@
                     contenedor.innerHTML += card;
                 }
             } catch (err) {
-                console.error("Error al cargar la maestra filtrada:", err);
-                contenedor.innerHTML = '<p class="text-sm text-red-500 text-center py-4">Error al cargar los parámetros del plan de calidad.</p>';
+                console.error(err);
+                contenedor.innerHTML = '<p class="text-sm text-red-500 text-center py-4">Error al cargar los parámetros.</p>';
+            }
+        }
+
+        async function consultarRegistrosEdicion() {
+            const fecha = document.getElementById('admin_fecha').value;
+            const turno = document.getElementById('admin_turno').value;
+            const tbody = document.getElementById('tabla-edicion-registros');
+            const contadorEl = document.getElementById('contador-registros');
+
+            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
+
+            try {
+                const res = await fetch(`/api/plan-calidad/registros-turno?fecha=${fecha}&turno=${turno}`);
+                const data = await res.json();
+                const registros = data.data || [];
+
+                if (registros.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 italic">No existen registros para esta fecha y turno.</td></tr>';
+                    contadorEl.textContent = '0 registros encontrados.';
+                    return;
+                }
+
+                contadorEl.textContent = `${registros.length} registros encontrados.`;
+                tbody.innerHTML = '';
+
+                registros.forEach((r, idx) => {
+                    tbody.innerHTML += `
+                        <tr class="border-b">
+                            <td class="p-2 border">${r.zona}</td>
+                            <td class="p-2 border font-medium">${r.parametro}</td>
+                            <td class="p-2 border font-mono text-xs text-gray-600">${r.limite || '-'}</td>
+                            <td class="p-2 border">
+                                <input type="text" data-id="${r.id}" value="${r.valor}" class="input-edicion-valor border rounded p-1 w-full text-sm">
+                            </td>
+                            <td class="p-2 border text-xs text-gray-600">${r.operador || '-'}</td>
+                        </tr>
+                    `;
+                });
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-red-500">Error al consultar los registros.</td></tr>';
+            }
+        }
+
+        async function guardarEdicionRegistros() {
+            const inputs = document.querySelectorAll('.input-edicion-valor');
+            let actualizaciones = [];
+
+            inputs.forEach(inp => {
+                actualizaciones.push({
+                    id: inp.dataset.id,
+                    valor: inp.value.trim()
+                });
+            });
+
+            if (actualizaciones.length === 0) {
+                alert("No hay registros para actualizar.");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/plan-calidad/actualizar-lote', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ actualizaciones })
+                });
+
+                if (res.ok) {
+                    alert("¡Cambios guardados con éxito!");
+                    cerrarModalAdministracion();
+                    cargarTablaRegistros();
+                } else {
+                    alert("Error al guardar los cambios.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error de conexión al guardar.");
+            }
+        }
+
+        async function confirmarEliminarRegistros() {
+            const fecha = document.getElementById('admin_fecha').value;
+            const turno = document.getElementById('admin_turno').value;
+
+            if (!confirm(`¿Estás seguro de eliminar TODOS los registros correspondientes al ${fecha} en el ${turno}? Esta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/plan-calidad/eliminar-turno?fecha=${fecha}&turno=${turno}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    alert("¡Turno eliminado con éxito!");
+                    cerrarModalAdministracion();
+                    cargarTablaRegistros();
+                } else {
+                    alert("Error al eliminar el turno.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error de conexión al eliminar.");
             }
         }
 
@@ -642,223 +776,60 @@
             const turno = document.getElementById('form_turno').value;
             const operador = document.getElementById('form_operador').value;
 
-            // VALIDACIÓN DE SEGURIDAD: Verificar si ya existen registros guardados para esta fecha y turno
-            try {
-                const resCheck = await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${turno}`);
-                const dataCheck = await resCheck.json();
-                
-                if (dataCheck.data && dataCheck.data.length > 0) {
-                    alert(
-                        `🚫 REGISTRO BLOQUEADO\n\n` +
-                        `Ya existen mediciones registradas para la fecha ${fecha} en el ${turno}.\n\n` +
-                        `• Por favor verifique si ha seleccionado la FECHA y TURNO correctos.\n` +
-                        `• Si lo que desea es modificar un dato ya ingresado, debe ir a la opción "⚙️ Administrar".`
-                    );
-                    return; // Cancela el envío por completo
-                }
-            } catch (e) {
-                console.error("Error al verificar registros existentes:", e);
-            }
-
             const inputs = document.querySelectorAll('.input-medida');
-            const registros = [];
+            let mediciones = [];
 
             inputs.forEach(inp => {
-                let val = inp.value.trim();
-                if (val) {
-                    let planAccion = '';
-                    const containerId = inp.dataset.containerId;
-                    if (containerId) {
-                        const container = document.getElementById(containerId);
-                        if (container && !container.classList.contains('hidden')) {
-                            const txtArea = container.querySelector('.input-plan-accion');
-                            if (txtArea) planAccion = txtArea.value.trim();
-                        }
+                const zona = inp.dataset.zona;
+                const parametro = inp.dataset.param;
+                const limite = inp.dataset.limite;
+                const frecuencia = inp.dataset.frecuencia;
+                const valor = inp.value.trim();
+                
+                let planAccion = '';
+                const containerId = inp.dataset.containerId;
+                if (containerId) {
+                    const container = document.getElementById(containerId);
+                    if (container && !container.classList.contains('hidden')) {
+                        const txtArea = container.querySelector('.input-plan-accion');
+                        if (txtArea) planAccion = txtArea.value.trim();
                     }
-
-                    registros.push({
-                        zona: inp.dataset.zona,
-                        parametro: inp.dataset.param,
-                        valor: val,
-                        limite: inp.dataset.limite,
-                        frecuencia: inp.dataset.frecuencia,
-                        plan_accion: planAccion
-                    });
-                }
-            });
-
-            if (registros.length === 0) {
-                alert("Por favor ingrese al menos un valor de medición.");
-                return;
-            }
-
-            const payload = { fecha, turno, operador, registros };
-
-            const response = await fetch('/api/plan-calidad/guardar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                alert("¡Mediciones registradas correctamente!");
-                cerrarModalFormulario();
-                cargarTablaRegistros();
-            } else {
-                alert("Ocurrió un error al guardar los datos.");
-            }
-        }
-
-        let registrosEdicionActuales = [];
-
-        function escaparHTML(valor) {
-            return String(valor ?? '').replace(/[&<>"']/g, caracter => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            })[caracter]);
-        }
-
-        async function consultarRegistrosEdicion() {
-            const fecha = document.getElementById('admin_fecha').value;
-            const turno = document.getElementById('admin_turno').value;
-            const tabla = document.getElementById('tabla-edicion-registros');
-            const contador = document.getElementById('contador-registros');
-
-            if (!fecha) {
-                alert('Seleccione una fecha.');
-                return;
-            }
-
-            tabla.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
-            contador.textContent = 'Consultando...';
-
-            try {
-                const url = `/api/plan-calidad/registros?f_desde=${encodeURIComponent(fecha)}&f_hasta=${encodeURIComponent(fecha)}&turno=${encodeURIComponent(turno)}`;
-                const respuesta = await fetch(url);
-                const datos = await respuesta.json();
-
-                if (!respuesta.ok) {
-                    throw new Error(datos.detail || 'No fue posible consultar los registros.');
                 }
 
-                registrosEdicionActuales = Array.isArray(datos.data) ? datos.data : [];
-                contador.textContent = `${registrosEdicionActuales.length} registros encontrados para ${fecha} · ${turno}`;
-
-                if (registrosEdicionActuales.length === 0) {
-                    tabla.innerHTML = '<tr><td colspan="5" class="p-5 text-center text-gray-500">No existen registros para esta fecha y turno.</td></tr>';
-                    return;
-                }
-
-                tabla.innerHTML = registrosEdicionActuales.map(registro => `
-                    <tr class="hover:bg-green-50">
-                        <td class="p-2 border">${escaparHTML(registro.zona)}</td>
-                        <td class="p-2 border">${escaparHTML(registro.parametro)}</td>
-                        <td class="p-2 border text-center">${escaparHTML(registro.limite || '-')}</td>
-                        <td class="p-2 border">
-                            <input type="text"
-                                   class="valor-edicion w-full min-w-[110px] border rounded p-2"
-                                   data-id="${Number(registro.id)}"
-                                   value="${escaparHTML(registro.valor)}"
-                                   aria-label="Valor para ${escaparHTML(registro.parametro)}">
-                        </td>
-                        <td class="p-2 border">${escaparHTML(registro.operador || '-')}</td>
-                    </tr>
-                `).join('');
-            } catch (error) {
-                registrosEdicionActuales = [];
-                tabla.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-600">${escaparHTML(error.message)}</td></tr>`;
-                console.error('Error consultando registros para edición:', error);
-            }
-        }
-
-        async function guardarEdicionRegistros() {
-            const fecha = document.getElementById('admin_fecha').value;
-            const turno = document.getElementById('admin_turno').value;
-            const inputs = document.querySelectorAll('#tabla-edicion-registros .valor-edicion');
-
-            if (!registrosEdicionActuales.length || !inputs.length) {
-                alert('No hay registros para modificar.');
-                return;
-            }
-
-            const registros = Array.from(inputs).map(input => ({
-                id: Number(input.dataset.id),
-                valor: input.value.trim()
-            }));
-
-            if (registros.some(registro => !Number.isInteger(registro.id) || !registro.valor)) {
-                alert('Verifique que todos los registros tengan un valor válido. No se permiten valores vacíos.');
-                return;
-            }
-
-            if (!confirm(`¿Desea guardar los cambios de los registros del ${fecha}, ${turno}?`)) {
-                return;
-            }
-
-            try {
-                const respuesta = await fetch('/api/plan-calidad/editar', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fecha, turno, registros })
+                mediciones.push({
+                    zona,
+                    parametro,
+                    limite,
+                    frecuencia,
+                    valor,
+                    plan_accion: planAccion
                 });
-                const resultado = await respuesta.json();
+            });
 
-                if (!respuesta.ok) {
-                    throw new Error(resultado.detail || 'No se pudieron guardar los cambios.');
-                }
-
-                alert(`Se actualizaron ${resultado.actualizados ?? registros.length} registros correctamente.`);
-                cerrarModalAdministracion();
-                await cargarTablaRegistros();
-            } catch (error) {
-                alert(error.message);
-                console.error('Error guardando modificaciones:', error);
-            }
-        }
-
-        async function confirmarEliminarRegistros() {
-            const fecha = document.getElementById('admin_fecha').value;
-            const turno = document.getElementById('admin_turno').value;
-            const cantidad = registrosEdicionActuales.length;
-
-            if (!cantidad) {
-                alert('No hay registros para eliminar.');
-                return;
-            }
-
-            const primeraConfirmacion = confirm(
-                `¿ESTÁ SEGURO DE ELIMINAR LOS REGISTROS DEL PLAN DE CALIDAD?\n\n` +
-                `Fecha: ${fecha}\nTurno: ${turno}\nCantidad: ${cantidad} registros\n\n` +
-                'Esta acción no se puede deshacer.'
-            );
-            if (!primeraConfirmacion) return;
-
-            const segundaConfirmacion = confirm(
-                `CONFIRMACIÓN FINAL\n\nSe eliminarán definitivamente ${cantidad} registros del ${fecha}, ${turno}.\n\n¿Desea continuar?`
-            );
-            if (!segundaConfirmacion) return;
+            const payload = {
+                fecha,
+                turno,
+                operador,
+                mediciones
+            };
 
             try {
-                const respuesta = await fetch('/api/plan-calidad/eliminar', {
+                const res = await fetch('/api/plan-calidad/guardar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fecha, turno })
+                    body: JSON.stringify(payload)
                 });
-                const resultado = await respuesta.json();
 
-                if (!respuesta.ok) {
-                    throw new Error(resultado.detail || 'No se pudieron eliminar los registros.');
+                if (res.ok) {
+                    alert("¡Mediciones guardadas con éxito!");
+                    cerrarModalFormulario();
+                    cargarTablaRegistros();
+                } else {
+                    alert("Error al guardar las mediciones.");
                 }
-
-                alert(`Se eliminaron ${resultado.eliminados ?? cantidad} registros correctamente.`);
-                cerrarModalAdministracion();
-                await cargarTablaRegistros();
-            } catch (error) {
-                alert(error.message);
-                console.error('Error eliminando registros:', error);
+            } catch (err) {
+                console.error(err);
+                alert("Error de conexión al guardar.");
             }
         }
 
