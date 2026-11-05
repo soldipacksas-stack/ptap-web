@@ -409,6 +409,15 @@
             });
 
             bodyEl.innerHTML = '';
+            listaFilasUnicas.sort((a, b) => {
+                let indexA = ordenPuntos.indexOf(a.zona);
+                let indexB = ordenPuntos.indexOf(b.zona);
+                if (indexA === -1) indexA = 999;
+                if (indexB === -1) indexB = 999;
+                if (indexA !== indexB) return indexA - indexB;
+                return a.parametroLimpio.localeCompare(b.parametroLimpio);
+            });
+
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
                     <tr class="hover:bg-green-50/50 transition">
@@ -418,9 +427,35 @@
                         <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                 `;
 
-                mapaColumnas.forEach(col => {
+                // Agrupar las columnas por cada turno de la fecha para manejar si es 1 vez por turno (duplicar/fusionar valor en ambas horas)
+                mapaColumnas.forEach((col, idx) => {
                     const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
-                    const valMedido = dictBusqueda[busquedaKey];
+                    let valMedido = dictBusqueda[busquedaKey];
+
+                    // Si es un parámetro de 1 vez por turno y la columna es la segunda hora del turno, replicar el valor o dejarlo limpio (según Excel)
+                    const horasDelTurno = HORAS_TURNO[col.turno];
+                    const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
+                    const esFrecuenciaUnaVez = item.frecuencia && item.frecuencia.toLowerCase().includes('1 vez turno');
+
+                    if (valMedido === undefined && esFrecuenciaUnaVez && esSegundaHora) {
+                        // Buscar si existe valor en la primera hora del mismo turno para replicarlo visualmente como en Excel
+                        const busquedaKeyPrimera = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
+                        // O bien, si se guarda en Muestra 1, replicamos el valor en la celda de Muestra 2 para que ambas columnas del turno muestren el dato (como pH o Agua Fuente)
+                    }
+
+                    // Si el parámetro NO es de muestra 1/2 y solo tiene un valor guardado por turno, replicarlo en ambas horas del turno para que luzca como en Excel
+                    if (valMedido === undefined) {
+                        // Intentar buscar si hay un registro general guardado sin la etiqueta de muestra
+                        const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
+                        if (regGeneral) valMedido = regGeneral.valor;
+                    }
+
+                    // Si aún está undefined, intentemos buscar específicamente Muestra 1 para la primera hora y Muestra 2 para la segunda hora
+                    if (valMedido === undefined) {
+                        const paramBusquedaEspecifica = esSegundaHora ? `${item.parametroLimpio} (Muestra 2)` : `${item.parametroLimpio} (Muestra 1)`;
+                        const regEspecifico = registrosBD.find(r => r.zona === item.zona && r.parametro === paramBusquedaEspecifica && r.fecha === col.fecha && r.turno === col.turno);
+                        if (regEspecifico) valMedido = regEspecifico.valor;
+                    }
 
                     let displayTexto = valMedido !== undefined ? valMedido : 'NA';
                     let estilo = 'text-gray-700';
@@ -431,6 +466,16 @@
                         estilo = 'font-semibold text-gray-900';
                     } else {
                         estilo = 'text-gray-400 italic';
+                    }
+
+                    // Si es de 1 vez por turno y es la segunda celda del turno, si el usuario prefiere celda vacía o replicada, aquí aplicamos la lógica limpia
+                    if (esFrecuenciaUnaVez && esSegundaHora && valMedido === undefined) {
+                        // Si en la primera hora hay valor, replicarlo para cubrir ambas celdas del turno como en tu imagen de Excel
+                        const valPrimeraHora = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`];
+                        if (valPrimeraHora !== undefined) {
+                            displayTexto = valPrimeraHora;
+                            estilo = 'font-semibold text-gray-900';
+                        }
                     }
 
                     filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
