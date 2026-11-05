@@ -348,7 +348,6 @@
 
             let dictBusqueda = {};
             registrosBD.forEach(r => {
-                // Normalizar el nombre del parámetro para unificar Muestra 1 y Muestra 2 en una sola llave limpia
                 let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
                 const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}`;
                 dictBusqueda[key] = r.valor;
@@ -420,7 +419,6 @@
                 `;
 
                 mapaColumnas.forEach(col => {
-                    // Buscar el valor combinando el parámetro limpio con la fecha y hora/turno de la columna
                     const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
                     const valMedido = dictBusqueda[busquedaKey];
 
@@ -500,7 +498,6 @@
                         const esSensorial = item.tipo === "sensorial";
                         const esEstado = item.tipo === "estado";
 
-                        // Mantener la hora en la etiqueta del formulario para guiar al operador
                         let nombreParametroForm = item.param;
                         if (item.param.includes("(Muestra 1)")) {
                             let horaM1 = (turnoSel === "Turno 1") ? "07:00" : (turnoSel === "Turno 2") ? "15:00" : "23:00";
@@ -702,12 +699,12 @@
                 return;
             }
 
-            const перваяConfirmacion = confirm(
+            const primeraConfirmacion = confirm(
                 `¿ESTÁ SEGURO DE ELIMINAR LOS REGISTROS DEL PLAN DE CALIDAD?\n\n` +
                 `Fecha: ${fecha}\nTurno: ${turno}\nCantidad: ${cantidad} registros\n\n` +
                 'Esta acción no se puede deshacer.'
             );
-            if (!приерaConfirmacion && !primeraConfirmacion) return;
+            if (!primeraConfirmacion) return;
 
             const segundaConfirmacion = confirm(
                 `CONFIRMACIÓN FINAL\n\nSe eliminarán definitivamente ${cantidad} registros del ${fecha}, ${turno}.\n\n¿Desea continuar?`
