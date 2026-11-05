@@ -368,9 +368,7 @@
                 }
             });
 
-            // ==========================================
-            // ORDEN PERSONALIZADO (Idéntico al Excel)
-            // ==========================================
+            // Orden personalizado según el Excel
             const ordenPuntos = [
                 "Entrada Agua Potable",
                 "Agua potable para Servicios Generales",
@@ -497,6 +495,7 @@
                         const esSensorial = item.tipo === "sensorial";
                         const esEstado = item.tipo === "estado";
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}"`;
+                        
                         let inputHtml = (esSensorial || esEstado) ?
                             `<select ${atributos} class="input-medida border rounded p-2 text-sm w-full">
                                 <option value="">Seleccione...</option>
