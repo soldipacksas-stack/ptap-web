@@ -344,7 +344,6 @@
             let dictBusqueda = {};
             let tieneMuestrasMultiples = new Set();
 
-            // Mapear los registros preservando Muestra 1 vs Muestra 2
             registrosBD.forEach(r => {
                 let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
                 let esM1 = /\(Muestra\s*1\)/i.test(r.parametro);
@@ -429,7 +428,7 @@
                 mapaColumnas.forEach((col) => {
                     if (skipNextCol > 0) {
                         skipNextCol--;
-                        return; // Omitir la segunda columna cuando la primera es de 1 vez por turno (colspan=2)
+                        return;
                     }
 
                     const horasDelTurno = HORAS_TURNO[col.turno];
@@ -442,7 +441,6 @@
                     let valMedido = undefined;
 
                     if (esDoble) {
-                        // Parámetro de 2 muestras por turno
                         if (esPrimeraHora) {
                             valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
                             if (valMedido === undefined) {
@@ -452,7 +450,6 @@
                             valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M2`];
                         }
                     } else {
-                        // Parámetro de 1 sola vez por turno
                         valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
                         if (valMedido === undefined) {
                             valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
@@ -464,6 +461,20 @@
 
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                         estilo = 'bg-red-100 text-red-700 font-bold';
+                    } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
+                        let numeros = item.limite.match(/-?\d+(\.\d+)?/g);
+                        if (numeros && numeros.length >= 2) {
+                            let min = parseFloat(numeros[0]);
+                            let max = parseFloat(numeros[1]);
+                            let numVal = parseFloat(displayTexto);
+                            if (numVal < min || numVal > max) {
+                                estilo = 'bg-red-100 text-red-700 font-bold';
+                            } else {
+                                estilo = 'font-semibold text-gray-900';
+                            }
+                        } else {
+                            estilo = 'font-semibold text-gray-900';
+                        }
                     } else if (displayTexto !== 'NA') {
                         estilo = 'font-semibold text-gray-900';
                     } else {
@@ -471,11 +482,9 @@
                     }
 
                     if (!esDoble && esPrimeraHora) {
-                        // Parámetro de 1 sola vez por turno -> Celda unificada con colspan="2"
                         skipNextCol = 1;
                         filaHTML += `<td colspan="2" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
                     } else {
-                        // Parámetro de 2 muestras -> Celdas independientes
                         filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
                     }
                 });
@@ -507,6 +516,35 @@
         function cerrarModalAdministracion() {
             document.getElementById('modalAdministracion').classList.add('hidden');
             document.getElementById('modalAdministracion').classList.remove('flex');
+        }
+
+        function validarCasillaMedicion(input) {
+            const valStr = input.value.trim();
+            if (!valStr) return;
+
+            const valor = parseFloat(valStr);
+            if (isNaN(valor)) return;
+
+            const limiteStr = input.dataset.limite || '';
+            const numeros = limiteStr.match(/-?\d+(\.\d+)?/g);
+
+            if (numeros && numeros.length >= 2) {
+                const min = parseFloat(numeros[0]);
+                const max = parseFloat(numeros[1]);
+
+                if (valor < min || valor > max) {
+                    const confirmar = confirm(`⚠️ ADVERTENCIA: El valor ingresado (${valor}) está FUERA DE LOS LÍMITES de la especificación (${limiteStr}).\n\n¿Desea corregirlo?\n\n• Pulse [Aceptar] para corregir el valor.\n• Pulse [Cancelar] para guardarlo de todos modos (quedará registrado como fuera de rango en rojo).`);
+                    
+                    if (confirmar) {
+                        input.value = '';
+                        input.focus();
+                    } else {
+                        input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    }
+                } else {
+                    input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                }
+            }
         }
 
         async function renderizarCamposDinamicos() {
@@ -558,7 +596,7 @@
                                 <option value="">Seleccione...</option>
                                 ${esEstado ? '<option value="Cumple">Cumple</option><option value="No cumple">No cumple</option>' : '<option value="Pasa">Pasa</option><option value="No pasa">No pasa</option>'}
                             </select>` :
-                            `<input type="number" step="any" ${atributos} placeholder="Ingrese medición" class="input-medida border rounded p-2 text-sm w-full">`;
+                            `<input type="number" step="any" ${atributos} placeholder="Ingrese medición" onblur="validarCasillaMedicion(this)" onkeydown="if(event.key==='Enter'){this.blur();}" class="input-medida border rounded p-2 text-sm w-full">`;
 
                         card += `
                             <div class="flex flex-col">
@@ -584,7 +622,7 @@
             const registros = [];
 
             inputs.forEach(inp => {
-                const val = inp.value.trim();
+                let val = inp.value.trim();
                 if (val) {
                     registros.push({
                         zona: inp.dataset.zona,
