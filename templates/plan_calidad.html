@@ -462,7 +462,6 @@
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                         estilo = 'bg-red-100 text-red-700 font-bold';
                     } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
-                        // Reemplazar comas por puntos para leer correctamente los decimales en español (ej: "6,5" -> "6.5")
                         let limiteLimpio = item.limite.replace(/,/g, '.');
                         let partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
 
@@ -521,12 +520,22 @@
             document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
+        // Validación en tiempo real y apertura automática del campo de Plan de Acción
         function validarCasillaMedicion(input) {
             const valStr = input.value.trim();
-            if (!valStr) return;
+            const containerId = input.dataset.containerId;
+            const container = document.getElementById(containerId);
+
+            if (!valStr) {
+                if (container) container.classList.add('hidden');
+                return;
+            }
 
             const valor = parseFloat(valStr);
-            if (isNaN(valor)) return;
+            if (isNaN(valor)) {
+                if (container) container.classList.add('hidden');
+                return;
+            }
 
             const limiteStr = input.dataset.limite || '';
             let limiteLimpio = limiteStr.replace(/,/g, '.');
@@ -537,16 +546,17 @@
                 const max = parseFloat(partesLimites[1]);
 
                 if (valor < min || valor > max) {
-                    const confirmar = confirm(`⚠️ ADVERTENCIA: El valor ingresado (${valor}) está FUERA DE LOS LÍMITES de la especificación (${limiteStr}).\n\n¿Desea corregirlo?\n\n• Pulse [Aceptar] para corregir el valor.\n• Pulse [Cancelar] para guardarlo de todos modos (quedará registrado como fuera de rango en rojo).`);
-                    
-                    if (confirmar) {
-                        input.value = '';
-                        input.focus();
-                    } else {
-                        input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    if (container) {
+                        container.classList.remove('hidden'); // Muestra la casilla de plan de acción
                     }
                 } else {
                     input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
+                    if (container) {
+                        container.classList.add('hidden'); // Oculta si el valor vuelve a estar en rango
+                        const txtArea = container.querySelector('.input-plan-accion');
+                        if (txtArea) txtArea.value = '';
+                    }
                 }
             }
         }
@@ -574,6 +584,7 @@
                     zonas[zona].push({ param, frecuencia, dia, reqTurno, limite, tipo });
                 });
 
+                let contadorIdx = 0;
                 for (const [zona, items] of Object.entries(zonas)) {
                     let card = `
                         <div class="bg-gray-50 border rounded-lg p-4">
@@ -581,6 +592,8 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     `;
                     items.forEach(item => {
+                        contadorIdx++;
+                        const uniqueId = `pa_container_${contadorIdx}`;
                         const esSensorial = item.tipo === "sensorial";
                         const esEstado = item.tipo === "estado";
 
@@ -593,21 +606,26 @@
                             nombreParametroForm = item.param.replace("(Muestra 2)", `(Muestra 2) ${horaM2}`);
                         }
 
-                        const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}"`;
+                        const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}" data-container-id="${uniqueId}"`;
                         
                         let inputHtml = (esSensorial || esEstado) ?
                             `<select ${atributos} class="input-medida border rounded p-2 text-sm w-full">
                                 <option value="">Seleccione...</option>
                                 ${esEstado ? '<option value="Cumple">Cumple</option><option value="No cumple">No cumple</option>' : '<option value="Pasa">Pasa</option><option value="No pasa">No pasa</option>'}
                             </select>` :
-                            `<input type="number" step="any" ${atributos} placeholder="Ingrese medición" onblur="validarCasillaMedicion(this)" onkeydown="if(event.key==='Enter'){this.blur();}" class="input-medida border rounded p-2 text-sm w-full">`;
+                            `<input type="number" step="any" ${atributos} placeholder="Ingrese medición" oninput="validarCasillaMedicion(this)" class="input-medida border rounded p-2 text-sm w-full">`;
 
                         card += `
-                            <div class="flex flex-col">
+                            <div class="flex flex-col space-y-1">
                                 <label class="text-xs font-semibold text-gray-700">${nombreParametroForm}</label>
-                                <div class="flex items-center space-x-2 mt-1">
+                                <div class="flex items-center space-x-2">
                                     ${inputHtml}
                                     <span class="text-[10px] text-gray-500 italic whitespace-nowrap">${item.frecuencia} · Límite: ${item.limite}</span>
+                                </div>
+                                <!-- Casilla dinámica para el Plan de Acción -->
+                                <div id="${uniqueId}" class="hidden mt-1 p-2 bg-red-50 border border-red-300 rounded-md">
+                                    <label class="block text-[11px] font-bold text-red-700 mb-1">⚠️ Valor fuera de rango. Plan de acción / Observación:</label>
+                                    <textarea class="input-plan-accion w-full border border-red-300 rounded p-1.5 text-xs bg-white" placeholder="Describa la acción correctiva realizada..."></textarea>
                                 </div>
                             </div>
                         `;
@@ -628,12 +646,23 @@
             inputs.forEach(inp => {
                 let val = inp.value.trim();
                 if (val) {
+                    let planAccion = '';
+                    const containerId = inp.dataset.containerId;
+                    if (containerId) {
+                        const container = document.getElementById(containerId);
+                        if (container && !container.classList.contains('hidden')) {
+                            const txtArea = container.querySelector('.input-plan-accion');
+                            if (txtArea) planAccion = txtArea.value.trim();
+                        }
+                    }
+
                     registros.push({
                         zona: inp.dataset.zona,
                         parametro: inp.dataset.param,
                         valor: val,
                         limite: inp.dataset.limite,
-                        frecuencia: inp.dataset.frecuencia
+                        frecuencia: inp.dataset.frecuencia,
+                        plan_accion: planAccion
                     });
                 }
             });
