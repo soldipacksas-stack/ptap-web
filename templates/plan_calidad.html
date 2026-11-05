@@ -25,19 +25,23 @@
             position: sticky;
             z-index: 10;
             background-color: #ffffff;
+            /* Permitir que el texto salte de línea para que se lea completo */
+            white-space: normal !important;
+            word-break: break-word;
         }
 
-        /* Cabeceras fijas izquierdas necesitan z-index superior para sobreponerse al hacer scroll vertical/horizontal */
+        /* Cabeceras fijas izquierdas necesitan z-index superior para sobreponerse al hacer scroll */
         .table-sticky-container thead th.sticky-col {
             z-index: 30;
             background-color: #0b4f2f !important;
+            white-space: normal !important;
         }
 
-        /* Posicionamiento acumulativo izquierda para las 4 primeras columnas */
-        .col-punto { left: 0px; min-width: 140px; max-width: 150px; }
-        .col-parametro { left: 140px; min-width: 160px; max-width: 180px; }
-        .col-especificacion { left: 300px; min-width: 90px; max-width: 100px; }
-        .col-frecuencia { left: 390px; min-width: 90px; max-width: 100px; }
+        /* Posicionamiento acumulativo y anchos óptimos ajustados */
+        .col-punto { left: 0px; min-width: 190px; max-width: 190px; }
+        .col-parametro { left: 190px; min-width: 170px; max-width: 170px; }
+        .col-especificacion { left: 360px; min-width: 100px; max-width: 100px; }
+        .col-frecuencia { left: 460px; min-width: 105px; max-width: 105px; }
 
         /* Sombra sutil a la derecha de la última columna fija para separar visualmente el scroll */
         .col-frecuencia::after {
@@ -369,10 +373,10 @@
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
                     <tr class="hover:bg-green-50/50 transition">
-                        <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50 sticky-col col-punto truncate" title="${item.zona}">${item.zona}</td>
-                        <td class="p-2 border border-gray-200 font-medium bg-gray-50 sticky-col col-parametro truncate" title="${item.parametro}">${item.parametro}</td>
-                        <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600 bg-gray-50 sticky-col col-especificacion truncate" title="${item.limite}">${item.limite}</td>
-                        <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia truncate" title="${item.frecuencia}">${item.frecuencia}</td>
+                        <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50 sticky-col col-punto" title="${item.zona}">${item.zona}</td>
+                        <td class="p-2 border border-gray-200 font-medium bg-gray-50 sticky-col col-parametro" title="${item.parametro}">${item.parametro}</td>
+                        <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600 bg-gray-50 sticky-col col-especificacion" title="${item.limite}">${item.limite}</td>
+                        <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                 `;
 
                 mapaColumnas.forEach(col => {
@@ -591,7 +595,7 @@
         }
 
         async function guardarEdicionRegistros() {
-            const fecha = document.getElementById('admin_fecha').value;
+            const fecha = document.getElementById('admin_fecha_v2').value || document.getElementById('admin_fecha').value;
             const turno = document.getElementById('admin_turno').value;
             const inputs = document.querySelectorAll('#tabla-edicion-registros .valor-edicion');
 
