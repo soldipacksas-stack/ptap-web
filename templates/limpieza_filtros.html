@@ -109,12 +109,11 @@
             </div>
             
             <div class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
-                <!-- Campo oculto para almacenar el ID en caso de modificación -->
                 <input type="hidden" id="form_registro_id" value="">
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block font-bold">Fecha de Finalización:</label>
+                        <label class="block font-bold">Fecha de Inicio / Registro:</label>
                         <input type="date" id="form_fecha" class="border rounded p-1.5 w-full">
                     </div>
                     <div>
@@ -220,6 +219,41 @@
         let cronometrosData = [];
         let chartInstancia = null;
 
+        // Función auxiliar para calcular el timestamp exacto de finalización considerando cambio de día por medianoche
+        function obtenerTimestampFin(reg) {
+            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return null;
+            
+            let fechaFinStr = reg.fecha;
+            // Si la hora final es menor que la hora de inicio, cruzó la medianoche (pertenece al día siguiente)
+            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
+                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
+                const [hFin] = reg.hora_final_est.split(':').map(Number);
+                if (hFin < hIni) {
+                    let d = new Date(reg.fecha + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    fechaFinStr = d.toISOString().split('T')[0];
+                }
+            }
+            return new Date(`${fechaFinStr}T${reg.hora_final_est}:00`).getTime();
+        }
+
+        // Función auxiliar para formatear la fecha y hora de fin real en la tabla
+        function obtenerFechaHoraFinFormateada(reg) {
+            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return { fecha: reg.fecha || '-', hora: '-' };
+            
+            let fechaFinStr = reg.fecha;
+            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
+                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
+                const [hFin] = reg.hora_final_est.split(':').map(Number);
+                if (hFin < hIni) {
+                    let d = new Date(reg.fecha + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    fechaFinStr = d.toISOString().split('T')[0];
+                }
+            }
+            return { fecha: fechaFinStr, hora: reg.hora_final_est };
+        }
+
         function cambiarTipoLimpieza() {
             const tipo = document.getElementById('form_tipo').value;
             if (tipo === "Retrolavado con parada") {
@@ -238,13 +272,10 @@
         }
 
         function abrirModalFiltrosPara(equipo) {
-            document.getElementById('form_registro_id').value = ""; // Nuevo registro
+            document.getElementById('form_registro_id').value = "";
             document.getElementById('form_equipo').value = equipo;
             document.getElementById('modal-titulo').textContent = `🛠️ Registrar Limpieza para Filtro: ${equipo}`;
-            
-            // Limpiar formulario para evitar datos residuales
             limpiarFormularioModal();
-
             document.getElementById('modalFiltros').classList.remove('hidden');
             document.getElementById('modalFiltros').classList.add('flex');
         }
@@ -254,7 +285,6 @@
             document.getElementById('form_equipo').value = item.equipo || 'F121';
             document.getElementById('modal-titulo').textContent = `✏️ Modificar Registro de Limpieza: ${item.equipo}`;
 
-            // Cargar datos existentes en los campos del modal
             document.getElementById('form_fecha').value = item.fecha || hoyStr;
             document.getElementById('form_operador').value = item.operador || '';
             document.getElementById('form_tipo').value = item.tipo_limpieza || 'Esterilización';
@@ -310,24 +340,23 @@
             const equipoFiltro = document.getElementById('filtro_equipo').value;
 
             let filtrados = data.data.filter(item => {
-                let matchFecha = fechaFiltro ? item.fecha.includes(fechaFiltro) : true;
+                const infoFin = obtenerFechaHoraFinFormateada(item);
+                let matchFecha = fechaFiltro ? (item.fecha.includes(fechaFiltro) || infoFin.fecha.includes(fechaFiltro)) : true;
                 let matchEquipo = equipoFiltro !== "Todos" ? item.equipo === equipoFiltro : true;
                 return matchFecha && matchEquipo;
             });
 
-            // Si no se está aplicando un filtro específico por fecha o equipo que requiera ver más,
-            // limitamos el histórico global a las 2 últimas esterilizaciones por cada filtro.
             if (!fechaFiltro && equipoFiltro === "Todos") {
                 const filtrosLista = ["F121", "F122", "F123", "F221", "F222", "F223"];
                 let ultimosDosPorFiltro = [];
                 filtrosLista.forEach(eq => {
                     const regsEq = data.data
                         .filter(r => r.equipo === eq)
-                        .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`))
-                        .slice(0, 2); // Tomar solo las 2 últimas
+                        .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a))
+                        .slice(0, 2);
                     ultimosDosPorFiltro.push(...regsEq);
                 });
-                filtrados = ultimosDosPorFiltro.sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est || '00:00'}:00`) - new Date(`${a.fecha}T${a.hora_final_est || '00:00'}:00`));
+                filtrados = ultimosDosPorFiltro.sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
             }
 
             if (filtrados.length === 0) {
@@ -336,14 +365,16 @@
                 filtrados.forEach((item, index) => {
                     const registroId = item.id !== undefined ? item.id : index; 
                     const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+                    const infoFin = obtenerFechaHoraFinFormateada(item);
+
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50">
-                            <td class="p-2.5 border-b">${item.fecha}</td>
+                            <td class="p-2.5 border-b font-medium">${infoFin.fecha}</td>
                             <td class="p-2.5 border-b font-bold text-[#0b4f2f]">${item.equipo}</td>
                             <td class="p-2.5 border-b">${item.operador}</td>
                             <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
                             <td class="p-2.5 border-b">${item.hora_inicio_est || '-'}</td>
-                            <td class="p-2.5 border-b">${item.hora_final_est || '-'}</td>
+                            <td class="p-2.5 border-b">${infoFin.hora}</td>
                             <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'}</td>
                             <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
                             <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
@@ -388,7 +419,7 @@
             filtros.forEach(eq => {
                 const regsEquipo = cronometrosData
                     .filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
-                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est}:00`) - new Date(`${a.fecha}T${a.hora_final_est}:00`));
+                    .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
 
                 const regFiltro = regsEquipo.length > 0 ? regsEquipo[0] : null;
                 
@@ -399,12 +430,10 @@
                 let timestampFin = null;
 
                 if (regFiltro) {
-                    const horaFin = regFiltro.hora_final_est;
-                    ultimaHTML = `${regFiltro.fecha} ${horaFin} (24h)`;
+                    const infoFin = obtenerFechaHoraFinFormateada(regFiltro);
+                    ultimaHTML = `${infoFin.fecha} ${infoFin.hora} (24h)`;
                     estadoHTML = '<span class="text-green-700 font-bold">🟢 Ciclo activo (48h)</span>';
-
-                    const fechaHoraFin = new Date(`${regFiltro.fecha}T${horaFin}:00`).getTime();
-                    timestampFin = fechaHoraFin + (48 * 60 * 60 * 1000);
+                    timestampFin = obtenerTimestampFin(regFiltro);
                 }
 
                 grid.innerHTML += `
@@ -478,12 +507,10 @@
             const ahora = new Date().getTime();
             const horasTranscurridas = filtros.map(eq => {
                 const regs = cronometrosData.filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
-                    .sort((a, b) => new Date(`${b.fecha}T${b.hora_final_est}:00`) - new Date(`${a.fecha}T${a.hora_final_est}:00`));
-                
+                    .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
+            
                 if (regs.length === 0) return 0;
-                const reg = regs[0];
-                const horaFin = reg.hora_final_est;
-                const finTime = new Date(`${reg.fecha}T${horaFin}:00`).getTime();
+                const finTime = obtenerTimestampFin(regs[0]);
                 const diffHoras = (ahora - finTime) / (1000 * 60 * 60);
                 return diffHoras > 0 ? parseFloat(diffHoras.toFixed(1)) : 0;
             });
@@ -506,7 +533,7 @@
                             backgroundColor: 'rgba(23, 128, 61, 0.1)',
                             borderWidth: 3,
                             fill: true,
-                            tension: 0.2
+                    tension: 0.2
                         },
                         {
                             label: 'Límite Máximo (48 Horas)',
@@ -565,16 +592,17 @@
             });
 
             if (res.ok) {
-                alert(registroId ? "¡Registro modificado con éxito!" : "¡Registro guardado con éxito!");
+                alert("¡Registro guardado con éxito!");
                 cerrarModalFiltros();
-                limpiarFormularioModal(); 
                 cargarTablaFiltros();
             } else {
-                alert("Error al procesar el registro.");
+                alert("Error al guardar el registro.");
             }
         }
 
-        cargarTablaFiltros();
+        window.onload = () => {
+            cargarTablaFiltros();
+        };
     </script>
 </body>
 </html>
