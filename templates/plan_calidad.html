@@ -25,7 +25,6 @@
             position: sticky;
             z-index: 10;
             background-color: #ffffff;
-            /* Permitir que el texto salte de línea para que se lea completo */
             white-space: normal !important;
             word-break: break-word;
         }
@@ -369,6 +368,45 @@
                 }
             });
 
+            // ==========================================
+            // ORDEN PERSONALIZADO (Idéntico al Excel)
+            // ==========================================
+            const ordenPuntos = [
+                "Entrada Agua Potable",
+                "Agua potable para Servicios Generales",
+                "Casino principal",
+                "Baño envasado",
+                "Casino Postobón",
+                "Agua Suavizada",
+                "Almacenamiento de agua potable para proceso",
+                "Ultrafiltración 1 agua Cervecera",
+                "Ultrafiltración 2 agua Cervecera",
+                "Ultrafiltración 1 de agua de Servicios",
+                "Ultrafiltración 2 de agua de Servicios",
+                "Tanque de almacenamiento PTAP cervecera",
+                "Tanque de almacenamiento PTAP Servicios",
+                "Filtración por carbón agua cervecera",
+                "Filtración por carbón agua  de Servicios",
+                "Salida tren filtros agua cervecera",
+                "Salida tren filtros agua de servicios",
+                "Tratamiento con luz Ultravioleta agua cervecera",
+                "Tratamiento con luz Ultravioleta agua de servicios",
+                "Cuarto generación dióxido de cloro"
+            ];
+
+            listaFilasUnicas.sort((a, b) => {
+                let indexA = ordenPuntos.indexOf(a.zona);
+                let indexB = ordenPuntos.indexOf(b.zona);
+                
+                if (indexA === -1) indexA = 999;
+                if (indexB === -1) indexB = 999;
+                
+                if (indexA !== indexB) {
+                    return indexA - indexB;
+                }
+                return a.parametro.localeCompare(b.parametro);
+            });
+
             bodyEl.innerHTML = '';
             listaFilasUnicas.forEach(item => {
                 let filaHTML = `
@@ -595,7 +633,7 @@
         }
 
         async function guardarEdicionRegistros() {
-            const fecha = document.getElementById('admin_fecha_v2').value || document.getElementById('admin_fecha').value;
+            const fecha = document.getElementById('admin_fecha').value;
             const turno = document.getElementById('admin_turno').value;
             const inputs = document.querySelectorAll('#tabla-edicion-registros .valor-edicion');
 
