@@ -462,7 +462,7 @@
                     if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                         estilo = 'bg-red-100 text-red-700 font-bold';
                     } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
-                        // Verificación específica para intensidades UV (límite > 25)
+                        // REGLA UV CORREGIDA: Límite > 25
                         if (item.parametroLimpio.toLowerCase().includes('intensidad') && item.parametroLimpio.toLowerCase().includes('uv')) {
                             let numVal = parseFloat(displayTexto);
                             if (numVal <= 25) {
@@ -530,21 +530,22 @@
             document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
-        function establecerNA(btn) {
-            const container = btn.closest('.bg-white');
-            const input = container.querySelector('.input-medida');
-            if (!input) return;
-
-            if (input.tagName === 'SELECT') {
-                input.value = 'N/A';
-            } else {
-                input.type = 'text';
-                input.value = 'NA';
+        // Función rápida para marcar N/A en los formularios
+        function ponerNA(inputOrBtn) {
+            let parent = inputOrBtn.closest('.bg-white');
+            let input = parent.querySelector('.input-medida');
+            if (input) {
+                if (input.tagName === 'SELECT') {
+                    input.value = 'N/A';
+                } else {
+                    input.type = 'text';
+                    input.value = 'N/A';
+                }
+                const containerId = input.dataset.containerId;
+                const container = document.getElementById(containerId);
+                if (container) container.classList.add('hidden');
+                input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
             }
-            const containerId = input.dataset.containerId;
-            const alertContainer = document.getElementById(containerId);
-            if (alertContainer) alertContainer.classList.add('hidden');
-            input.classList.remove('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
         }
 
         function validarCasillaMedicion(input) {
@@ -567,7 +568,7 @@
 
             const limiteStr = input.dataset.limite || '';
 
-            // Validación específica para intensidades de lámparas UV (> 25)
+            // VALIDACIÓN LÁMPARA UV > 25
             if (paramName.includes('intensidad') && paramName.includes('uv')) {
                 if (valor <= 25) {
                     input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
@@ -643,8 +644,16 @@
                         const esEstado = item.tipo === "estado";
                         const esUV = item.param.toLowerCase().includes('intensidad') && item.param.toLowerCase().includes('uv');
 
-                        // IMPORTANTE: Guardamos el parámetro puro original de la base de datos (item.param) 
-                        // para que el backend lo reconozca sin alteraciones de hora o texto extra.
+                        let nombreParametroForm = item.param;
+                        if (item.param.includes("(Muestra 1)")) {
+                            let horaM1 = (turnoSel === "Turno 1") ? "07:00" : (turnoSel === "Turno 2") ? "15:00" : "23:00";
+                            nombreParametroForm = item.param.replace("(Muestra 1)", `(Muestra 1) ${horaM1}`);
+                        } else if (item.param.includes("(Muestra 2)")) {
+                            let horaM2 = (turnoSel === "Turno 1") ? "11:00" : (turnoSel === "Turno 2") ? "17:00" : "03:00";
+                            nombreParametroForm = item.param.replace("(Muestra 2)", `(Muestra 2) ${horaM2}`);
+                        }
+
+                        // Mantenemos el data-param original para el backend
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}" data-container-id="${uniqueId}"`;
                         
                         let limiteTextoForm = esUV ? "Diario · Límite: > 25" : `Diario · Límite: ${item.limite}`;
@@ -660,8 +669,8 @@
                         card += `
                             <div class="bg-white p-3 rounded border shadow-sm relative">
                                 <div class="flex justify-between items-center mb-1">
-                                    <label class="block font-bold text-xs text-gray-700">${item.param}</label>
-                                    <button type="button" onclick="establecerNA(this)" class="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded font-bold transition">N/A</button>
+                                    <label class="block font-bold text-xs text-gray-700">${nombreParametroForm}</label>
+                                    <button type="button" onclick="ponerNA(this)" class="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded font-bold transition">N/A</button>
                                 </div>
                                 <div class="flex items-center space-x-2">
                                     ${inputHtml}
@@ -692,10 +701,9 @@
             tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
 
             try {
-                const res = await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${turno}`);
+                const res = await fetch(`/api/plan-calidad/registros-turno?fecha=${fecha}&turno=${turno}`);
                 const data = await res.json();
-                const todosRegistros = data.data || [];
-                const registros = todosRegistros.filter(r => r.fecha === fecha && r.turno === turno);
+                const registros = data.data || [];
 
                 if (registros.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 italic">No existen registros para esta fecha y turno.</td></tr>';
@@ -794,21 +802,13 @@
 
             const inputs = document.querySelectorAll('.input-medida');
             let mediciones = [];
-            let camposVacios = [];
 
             inputs.forEach(inp => {
-                let valor = inp.value.trim();
                 const zona = inp.dataset.zona;
                 const parametro = inp.dataset.param;
-
-                // Si es un campo numérico y está vacío, poner "NA" o exigir llenado
-                if (!valor) {
-                    camposVacios.push(`• [${zona}] ${parametro}`);
-                    return;
-                }
-
                 const limite = inp.dataset.limite;
                 const frecuencia = inp.dataset.frecuencia;
+                const valor = inp.value.trim();
                 
                 let planAccion = '';
                 const containerId = inp.dataset.containerId;
@@ -821,29 +821,21 @@
                 }
 
                 mediciones.push({
-                    zona: zona,
-                    parametro: parametro,
-                    limite: limite || "",
-                    frecuencia: frecuencia || "",
-                    valor: valor,
+                    zona,
+                    parametro,
+                    limite,
+                    frecuencia,
+                    valor,
                     plan_accion: planAccion
                 });
             });
 
-            if (camposVacios.length > 0) {
-                alert("⚠️ Los siguientes campos están vacíos. Por favor complete los valores o haga clic en N/A:\n\n" + camposVacios.join("\n"));
-                return;
-            }
-
             const payload = {
-                fecha: fecha,
-                turno: turno,
-                operador: operador,
-                mediciones: mediciones
+                fecha,
+                turno,
+                operador,
+                mediciones
             };
-
-            // Imprimir en la consola del navegador para depuración exacta
-            console.log("Payload enviado al servidor:", JSON.stringify(payload, null, 2));
 
             try {
                 const res = await fetch('/api/plan-calidad/guardar', {
@@ -857,9 +849,7 @@
                     cerrarModalFormulario();
                     cargarTablaRegistros();
                 } else {
-                    const errData = await res.json().catch(() => ({}));
-                    console.error("Detalle del error del servidor:", errData);
-                    alert("Error al guardar las mediciones. Revisa la consola (F12) para más detalles.");
+                    alert("Error al guardar las mediciones.");
                 }
             } catch (err) {
                 console.error(err);
