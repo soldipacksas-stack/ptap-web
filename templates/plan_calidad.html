@@ -66,6 +66,7 @@
                 <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
                 <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
                 <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
+                <a href="/planes-accion" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Planes de Acción</a>
             </nav>
         </aside>
 
@@ -758,7 +759,7 @@
             let mediciones = [];
             let camposVacios = [];
 
-            inputs.forEach(inp => {
+            for (const inp of inputs) {
                 const zona = inp.dataset.zona;
                 const parametro = inp.dataset.param;
                 const valor = inp.value.trim();
@@ -783,6 +784,29 @@
                     }
                 }
 
+                // Si hay un plan de acción redactado por una desviación, lo guardamos en el nuevo módulo
+                if (planAccion && planAccion.trim() !== "") {
+                    try {
+                        await fetch('/api/planes-accion/guardar', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                fecha: fecha,
+                                turno: turno,
+                                modulo: "Plan de Calidad",
+                                zona: zona,
+                                parametro: parametro,
+                                valor_registrado: valorFinal,
+                                limite_esperado: limite,
+                                descripcion_accion: planAccion,
+                                operador: operador
+                            })
+                        });
+                    } catch (e) {
+                        console.error("Error al registrar el plan de acción:", e);
+                    }
+                }
+
                 mediciones.push({
                     zona,
                     parametro,
@@ -791,7 +815,7 @@
                     valor: valorFinal,
                     plan_accion: planAccion
                 });
-            });
+            }
 
             // Si hay campos vacíos, lanzamos una alerta de confirmación detallada
             if (camposVacios.length > 0) {
