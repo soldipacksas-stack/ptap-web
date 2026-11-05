@@ -6,7 +6,6 @@
     <title>Plan de Calidad PTAP - ZFCCC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Estilos personalizados para fijar las primeras 4 columnas de la matriz */
         .table-sticky-container {
             max-height: calc(100vh - 180px);
             overflow: auto;
@@ -271,239 +270,224 @@
                 return;
             }
 
-            const res = await fetch(`/api/plan-calidad/registros?f_desde=${desde}&f_hasta=${hasta}&turno=${turnoSel}`);
-            const responseData = await res.json();
-            const registrosBD = responseData.data || [];
+            try {
+                // 1. Consultar registros guardados en el rango
+                const resReg = await fetch(`/api/plan-calidad/registros?f_desde=${desde}&f_hasta=${hasta}&turno=${turnoSel}`);
+                const dataReg = await resReg.json();
+                const registrosBD = dataReg.data || [];
 
-            const fechasUnicas = [...new Set(registrosBD.map(r => r.fecha))].sort();
+                // 2. Consultar la lista maestra completa para asegurar que TODOS los parámetros posibles aparezcan
+                const resMaestra = await fetch(`/api/plan-calidad/maestra?fecha=${desde}&turno=${turnoSel}`);
+                const dataMaestra = await resMaestra.json();
+                const listaMaestra = dataMaestra.maestra || [];
 
-            const headEl = document.getElementById('header-matriz');
-            const bodyEl = document.getElementById('body-tabla');
+                const fechasUnicas = [...new Set(registrosBD.map(r => r.fecha))].sort();
+                if (fechasUnicas.length === 0 && desde) {
+                    fechasUnicas.push(desde);
+                }
 
-            if (fechasUnicas.length === 0) {
-                headEl.innerHTML = `
+                const headEl = document.getElementById('header-matriz');
+                const bodyEl = document.getElementById('body-tabla');
+
+                if (fechasUnicas.length === 0) {
+                    headEl.innerHTML = `
+                        <tr>
+                            <th class="p-2 border border-[#2c6e4b] sticky-col col-punto">Punto Muestreo</th>
+                            <th class="p-2 border border-[#2c6e4b] sticky-col col-parametro">Parámetro</th>
+                            <th class="p-2 border border-[#2c6e4b] sticky-col col-especificacion">Especificación</th>
+                            <th class="p-2 border border-[#2c6e4b] sticky-col col-frecuencia">Frecuencia</th>
+                        </tr>`;
+                    bodyEl.innerHTML = `<tr><td colspan="4" class="p-6 text-center text-gray-500 italic">No hay registros guardados para este filtro.</td></tr>`;
+                    return;
+                }
+
+                let mapaColumnas = [];
+                let htmlNivel1 = `
                     <tr>
-                        <th class="p-2 border border-[#2c6e4b] sticky-col col-punto">Punto Muestreo</th>
-                        <th class="p-2 border border-[#2c6e4b] sticky-col col-parametro">Parámetro</th>
-                        <th class="p-2 border border-[#2c6e4b] sticky-col col-especificacion">Especificación</th>
-                        <th class="p-2 border border-[#2c6e4b] sticky-col col-frecuencia">Frecuencia</th>
-                    </tr>`;
-                bodyEl.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="p-6 text-center text-gray-500 italic">No hay registros guardados para este filtro.</td>
-                    </tr>`;
-                return;
-            }
+                        <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-punto">Punto Muestreo</th>
+                        <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-parametro">Parámetro</th>
+                        <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-especificacion">Especificación</th>
+                        <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-frecuencia">Frecuencia</th>
+                `;
+                let htmlNivel2 = `<tr>`;
+                let htmlNivel3 = `<tr>`;
 
-            let mapaColumnas = [];
-            let htmlNivel1 = `
-                <tr>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-punto">Punto Muestreo</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-parametro">Parámetro</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-especificacion">Especificación</th>
-                    <th rowspan="3" class="p-2 border border-[#2c6e4b] bg-[#0b4f2f] text-white align-bottom sticky-col col-frecuencia">Frecuencia</th>
-            `;
-            let htmlNivel2 = `<tr>`;
-            let htmlNivel3 = `<tr>`;
+                fechasUnicas.forEach(fechaStr => {
+                    const fObj = new Date(fechaStr + 'T00:00:00');
+                    const fechaTexto = fObj.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-            fechasUnicas.forEach(fechaStr => {
-                const fObj = new Date(fechaStr + 'T00:00:00');
-                const fechaTexto = fObj.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    const turnosProcesar = (turnoSel !== "Todos") ? [turnoSel] : ["Turno 1", "Turno 2", "Turno 3"];
+                    let subColsCount = 0;
 
-                const turnosProcesar = (turnoSel !== "Todos") ? [turnoSel] : ["Turno 1", "Turno 2", "Turno 3"];
-                let subColsCount = 0;
+                    turnosProcesar.forEach(t => {
+                        const horas = HORAS_TURNO[t] || ["00:00"];
+                        const regOp = registrosBD.find(r => r.fecha === fechaStr && r.turno === t);
+                        const operadorNombre = regOp ? regOp.operador : '-';
 
-                turnosProcesar.forEach(t => {
-                    const horas = HORAS_TURNO[t] || ["00:00"];
-                    const regOp = registrosBD.find(r => r.fecha === fechaStr && r.turno === t);
-                    const operadorNombre = regOp ? regOp.operador : '-';
+                        horas.forEach(h => {
+                            subColsCount++;
+                            mapaColumnas.push({
+                                fecha: fechaStr,
+                                turno: t,
+                                hora: h,
+                                operador: operadorNombre
+                            });
 
-                    horas.forEach(h => {
-                        subColsCount++;
-                        mapaColumnas.push({
-                            fecha: fechaStr,
-                            turno: t,
-                            hora: h,
-                            operador: operadorNombre
+                            htmlNivel2 += `<th class="p-1 border border-[#2c6e4b] bg-[#145c38] text-center min-w-[65px] font-mono text-[11px]">${h}</th>`;
+                            htmlNivel3 += `<th class="p-1 border border-[#2c6e4b] bg-[#1c6b43] text-center text-[10px] truncate max-w-[85px]" title="${operadorNombre}">${operadorNombre.split(' ')[0]}</th>`;
                         });
-
-                        htmlNivel2 += `<th class="p-1 border border-[#2c6e4b] bg-[#145c38] text-center min-w-[65px] font-mono text-[11px]">${h}</th>`;
-                        htmlNivel3 += `<th class="p-1 border border-[#2c6e4b] bg-[#1c6b43] text-center text-[10px] truncate max-w-[85px]" title="${operadorNombre}">${operadorNombre.split(' ')[0]}</th>`;
                     });
+
+                    htmlNivel1 += `<th colspan="${subColsCount}" class="p-2 border border-[#2c6e4b] bg-[#083024] text-center text-xs font-bold capitalize">${fechaTexto}</th>`;
                 });
 
-                htmlNivel1 += `<th colspan="${subColsCount}" class="p-2 border border-[#2c6e4b] bg-[#083024] text-center text-xs font-bold capitalize">${fechaTexto}</th>`;
-            });
+                htmlNivel1 += `</tr>`;
+                htmlNivel2 += `</tr>`;
+                htmlNivel3 += `</tr>`;
 
-            htmlNivel1 += `</tr>`;
-            htmlNivel2 += `</tr>`;
-            htmlNivel3 += `</tr>`;
+                headEl.innerHTML = htmlNivel1 + htmlNivel2 + htmlNivel3;
 
-            headEl.innerHTML = htmlNivel1 + htmlNivel2 + htmlNivel3;
+                // Mapear datos guardados
+                let dictBusqueda = {};
+                let tieneMuestrasMultiples = new Set();
 
-            let dictBusqueda = {};
-            let tieneMuestrasMultiples = new Set();
+                registrosBD.forEach(r => {
+                    let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
+                    let esM1 = /\(Muestra\s*1\)/i.test(r.parametro);
+                    let esM2 = /\(Muestra\s*2\)/i.test(r.parametro);
 
-            registrosBD.forEach(r => {
-                let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
-                let esM1 = /\(Muestra\s*1\)/i.test(r.parametro);
-                let esM2 = /\(Muestra\s*2\)/i.test(r.parametro);
-
-                if (esM1 || esM2) {
-                    tieneMuestrasMultiples.add(`${r.zona}|${paramLimpio}`);
-                }
-
-                let subKey = esM1 ? 'M1' : (esM2 ? 'M2' : 'GEN');
-                const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}|${subKey}`;
-                dictBusqueda[key] = r.valor;
-            });
-
-            let listaFilasUnicas = [];
-            let combinacionesVistas = new Set();
-
-            registrosBD.forEach(r => {
-                let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
-                const comboKey = `${r.zona}|${paramLimpio}`;
-                if (!combinacionesVistas.has(comboKey)) {
-                    combinacionesVistas.add(comboKey);
-                    
-                    let esDobleMuestra = tieneMuestrasMultiples.has(comboKey) || 
-                                         (r.frecuencia && r.frecuencia.toLowerCase().includes('2 vez')) || 
-                                         (r.frecuencia && r.frecuencia.toLowerCase().includes('2 veces'));
-
-                    listaFilasUnicas.push({
-                        zona: r.zona,
-                        parametroOriginal: r.parametro,
-                        parametroLimpio: paramLimpio,
-                        limite: r.limite || '-',
-                        frecuencia: esDobleMuestra ? '2 veces turno' : (r.frecuencia || '1 vez turno'),
-                        esDobleMuestra: esDobleMuestra
-                    });
-                }
-            });
-
-            const ordenPuntos = [
-                "Entrada Agua Potable",
-                "Agua potable para Servicios Generales",
-                "Casino principal",
-                "Baño envasado",
-                "Casino Postobón",
-                "Agua Suavizada",
-                "Almacenamiento de agua potable para proceso",
-                "Ultrafiltración 1 agua Cervecera",
-                "Ultrafiltración 2 agua Cervecera",
-                "Ultrafiltración 1 de agua de Servicios",
-                "Ultrafiltración 2 de agua de Servicios",
-                "Tanque de almacenamiento PTAP cervecera",
-                "Tanque de almacenamiento PTAP Servicios",
-                "Filtración por carbón agua cervecera",
-                "Filtración por carbón agua  de Servicios",
-                "Salida tren filtros agua cervecera",
-                "Salida tren filtros agua de servicios",
-                "Tratamiento con luz Ultravioleta agua cervecera",
-                "Tratamiento con luz Ultravioleta agua de servicios",
-                "Cuarto generación dióxido de cloro"
-            ];
-
-            listaFilasUnicas.sort((a, b) => {
-                let indexA = ordenPuntos.indexOf(a.zona);
-                let indexB = ordenPuntos.indexOf(b.zona);
-                if (indexA === -1) indexA = 999;
-                if (indexB === -1) indexB = 999;
-                if (indexA !== indexB) return indexA - indexB;
-                return a.parametroLimpio.localeCompare(b.parametroLimpio);
-            });
-
-            bodyEl.innerHTML = '';
-            listaFilasUnicas.forEach(item => {
-                let filaHTML = `
-                    <tr class="hover:bg-green-50/50 transition">
-                        <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50 sticky-col col-punto" title="${item.zona}">${item.zona}</td>
-                        <td class="p-2 border border-gray-200 font-medium bg-gray-50 sticky-col col-parametro" title="${item.parametroLimpio}">${item.parametroLimpio}</td>
-                        <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600 bg-gray-50 sticky-col col-especificacion" title="${item.limite}">${item.limite}</td>
-                        <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
-                `;
-
-                let skipNextCol = 0;
-                mapaColumnas.forEach((col) => {
-                    if (skipNextCol > 0) {
-                        skipNextCol--;
-                        return;
+                    if (esM1 || esM2) {
+                        tieneMuestrasMultiples.add(`${r.zona}|${paramLimpio}`);
                     }
 
-                    const horasDelTurno = HORAS_TURNO[col.turno];
-                    const esPrimeraHora = horasDelTurno && horasDelTurno[0] === col.hora;
-                    const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
+                    let subKey = esM1 ? 'M1' : (esM2 ? 'M2' : 'GEN');
+                    const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}|${subKey}`;
+                    dictBusqueda[key] = r.valor;
+                });
 
-                    const comboKey = `${item.zona}|${item.parametroLimpio}`;
-                    const esDoble = item.esDobleMuestra || tieneMuestrasMultiples.has(comboKey);
+                // Construir lista única basada en la Maestra y los Registros existentes
+                let listaFilasUnicas = [];
+                let combinacionesVistas = new Set();
 
-                    let valMedido = undefined;
-
-                    if (esDoble) {
-                        if (esPrimeraHora) {
-                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
-                            if (valMedido === undefined) {
-                                valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
-                            }
-                        } else if (esSegundaHora) {
-                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M2`];
-                        }
-                    } else {
-                        valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
-                        if (valMedido === undefined) {
-                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
-                        }
+                // 1. Agregar desde la maestra para garantizar que aparezcan todos los parámetros de todos los turnos
+                listaMaestra.forEach(([zona, param, frecuencia, dia, reqTurno, limite]) => {
+                    let paramLimpio = param.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
+                    const comboKey = `${zona}|${paramLimpio}`;
+                    if (!combinacionesVistas.has(comboKey)) {
+                        combinacionesVistas.add(comboKey);
+                        let esDobleMuestra = (frecuencia && frecuencia.toLowerCase().includes('2')) || /\(Muestra\s*[12]\)/i.test(param);
+                        listaFilasUnicas.push({
+                            zona: zona,
+                            parametroLimpio: paramLimpio,
+                            limite: limite || '-',
+                            frecuencia: frecuencia || '1 vez turno',
+                            esDobleMuestra: esDobleMuestra
+                        });
                     }
+                });
 
-                    let displayTexto = (valMedido !== undefined && valMedido !== null && valMedido !== '') ? valMedido : 'NA';
-                    let estilo = 'text-gray-700';
+                // 2. Asegurar que cualquier registro histórico guardado también aparezca
+                registrosBD.forEach(r => {
+                    let paramLimpio = r.parametro.replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
+                    const comboKey = `${r.zona}|${paramLimpio}`;
+                    if (!combinacionesVistas.has(comboKey)) {
+                        combinacionesVistas.add(comboKey);
+                        let esDobleMuestra = /\(Muestra\s*[12]\)/i.test(r.parametro);
+                        listaFilasUnicas.push({
+                            zona: r.zona,
+                            parametroLimpio: paramLimpio,
+                            limite: r.limite || '-',
+                            frecuencia: r.frecuencia || '1 vez turno',
+                            esDobleMuestra: esDobleMuestra
+                        });
+                    }
+                });
 
-                    if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
-                        estilo = 'bg-red-100 text-red-700 font-bold';
-                    } else if (!isNaN(displayTexto) && item.limite && item.limite !== '-') {
-                        // REGLA UV CORREGIDA: Límite > 25
-                        if (item.parametroLimpio.toLowerCase().includes('intensidad') && item.parametroLimpio.toLowerCase().includes('uv')) {
-                            let numVal = parseFloat(displayTexto);
-                            if (numVal <= 25) {
-                                estilo = 'bg-red-100 text-red-700 font-bold';
-                            } else {
-                                estilo = 'font-semibold text-gray-900';
+                const ordenPuntos = [
+                    "Entrada Agua Potable", "Agua potable para Servicios Generales", "Casino principal",
+                    "Baño envasado", "Casino Postobón", "Agua Suavizada", "Almacenamiento de agua potable para proceso",
+                    "Ultrafiltración 1 agua Cervecera", "Ultrafiltración 2 agua Cervecera", "Ultrafiltración 1 de agua de Servicios",
+                    "Ultrafiltración 2 de agua de Servicios", "Tanque de almacenamiento PTAP cervecera", "Tanque de almacenamiento PTAP Servicios",
+                    "Filtración por carbón agua cervecera", "Filtración por carbón agua  de Servicios", "Salida tren filtros agua cervecera",
+                    "Salida tren filtros agua de servicios", "Tratamiento con luz Ultravioleta agua cervecera", "Tratamiento con luz Ultravioleta agua de servicios",
+                    "Cuarto generación dióxido de cloro"
+                ];
+
+                listaFilasUnicas.sort((a, b) => {
+                    let indexA = ordenPuntos.indexOf(a.zona);
+                    let indexB = ordenPuntos.indexOf(b.zona);
+                    if (indexA === -1) indexA = 999;
+                    if (indexB === -1) indexB = 999;
+                    if (indexA !== indexB) return indexA - indexB;
+                    return a.parametroLimpio.localeCompare(b.parametroLimpio);
+                });
+
+                bodyEl.innerHTML = '';
+                listaFilasUnicas.forEach(item => {
+                    let filaHTML = `
+                        <tr class="hover:bg-green-50/50 transition">
+                            <td class="p-2 border border-gray-200 font-semibold text-[#0b4f2f] bg-gray-50 sticky-col col-punto" title="${item.zona}">${item.zona}</td>
+                            <td class="p-2 border border-gray-200 font-medium bg-gray-50 sticky-col col-parametro" title="${item.parametroLimpio}">${item.parametroLimpio}</td>
+                            <td class="p-2 border border-gray-200 font-mono text-xs text-gray-600 bg-gray-50 sticky-col col-especificacion" title="${item.limite}">${item.limite}</td>
+                            <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
+                    `;
+
+                    let skipNextCol = 0;
+                    mapaColumnas.forEach((col) => {
+                        if (skipNextCol > 0) {
+                            skipNextCol--;
+                            return;
+                        }
+
+                        const horasDelTurno = HORAS_TURNO[col.turno];
+                        const esPrimeraHora = horasDelTurno && horasDelTurno[0] === col.hora;
+                        const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
+
+                        const comboKey = `${item.zona}|${item.parametroLimpio}`;
+                        const esDoble = item.esDobleMuestra || tieneMuestrasMultiples.has(comboKey);
+
+                        let valMedido = undefined;
+
+                        if (esDoble) {
+                            if (esPrimeraHora) {
+                                valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
+                                if (valMedido === undefined) {
+                                    valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
+                                }
+                            } else if (esSegundaHora) {
+                                valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M2`];
                             }
                         } else {
-                            let limiteLimpio = item.limite.replace(/,/g, '.');
-                            let partesLimites = limiteLimpio.match(/-?\d+(\.\d+)?/g);
-
-                            if (partesLimites && partesLimites.length >= 2) {
-                                let min = parseFloat(partesLimites[0]);
-                                let max = parseFloat(partesLimites[1]);
-                                let numVal = parseFloat(displayTexto);
-                                if (numVal < min || numVal > max) {
-                                    estilo = 'bg-red-100 text-red-700 font-bold';
-                                } else {
-                                    estilo = 'font-semibold text-gray-900';
-                                }
-                            } else {
-                                estilo = 'font-semibold text-gray-900';
+                            valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|GEN`];
+                            if (valMedido === undefined) {
+                                valMedido = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|M1`];
                             }
                         }
-                    } else if (displayTexto !== 'NA') {
-                        estilo = 'font-semibold text-gray-900';
-                    } else {
-                        estilo = 'text-gray-400 italic';
-                    }
 
-                    if (!esDoble && esPrimeraHora) {
-                        skipNextCol = 1;
-                        filaHTML += `<td colspan="2" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
-                    } else {
-                        filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
-                    }
+                        let displayTexto = (valMedido !== undefined && valMedido !== null && valMedido !== '') ? valMedido : 'NA';
+                        let estilo = 'text-gray-400 italic';
+
+                        if (displayTexto !== 'NA') {
+                            estilo = 'font-semibold text-gray-900';
+                            if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
+                                estilo = 'bg-red-100 text-red-700 font-bold';
+                            }
+                        }
+
+                        if (!esDoble && esPrimeraHora) {
+                            skipNextCol = 1;
+                            filaHTML += `<td colspan="2" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
+                        } else {
+                            filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
+                        }
+                    });
+
+                    filaHTML += `</tr>`;
+                    bodyEl.innerHTML += filaHTML;
                 });
-
-                filaHTML += `</tr>`;
-                bodyEl.innerHTML += filaHTML;
-            });
+            } catch (err) {
+                console.error("Error al cargar la tabla de registros:", err);
+            }
         }
 
         function abrirModalFormulario() {
@@ -530,7 +514,6 @@
             document.getElementById('modalAdministracion').classList.remove('flex');
         }
 
-        // Función rápida para marcar N/A en los formularios
         function ponerNA(inputOrBtn) {
             let parent = inputOrBtn.closest('.bg-white');
             let input = parent.querySelector('.input-medida');
@@ -568,7 +551,6 @@
 
             const limiteStr = input.dataset.limite || '';
 
-            // VALIDACIÓN LÁMPARA UV > 25
             if (paramName.includes('intensidad') && paramName.includes('uv')) {
                 if (valor <= 25) {
                     input.classList.add('bg-red-100', 'border-red-500', 'text-red-700', 'font-bold');
@@ -653,9 +635,7 @@
                             nombreParametroForm = item.param.replace("(Muestra 2)", `(Muestra 2) ${horaM2}`);
                         }
 
-                        // Mantenemos el data-param original para el backend
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}" data-container-id="${uniqueId}"`;
-                        
                         let limiteTextoForm = esUV ? "Diario · Límite: > 25" : `Diario · Límite: ${item.limite}`;
 
                         let inputHtml = (esSensorial || esEstado) ?
@@ -701,9 +681,10 @@
             tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">Consultando registros...</td></tr>';
 
             try {
-                const res = await fetch(`/api/plan-calidad/registros-turno?fecha=${fecha}&turno=${turno}`);
+                const res = await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${turno}`);
                 const data = await res.json();
-                const registros = data.data || [];
+                const todosRegistros = data.data || [];
+                const registros = todosRegistros.filter(r => r.fecha === fecha && r.turno === turno);
 
                 if (registros.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500 italic">No existen registros para esta fecha y turno.</td></tr>';
