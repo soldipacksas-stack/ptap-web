@@ -494,6 +494,17 @@
                     items.forEach(item => {
                         const esSensorial = item.tipo === "sensorial";
                         const esEstado = item.tipo === "estado";
+
+                        // Ajustar el nombre del parámetro en el formulario para mostrar la hora según el turno seleccionado
+                        let nombreParametroForm = item.param;
+                        if (item.param.includes("(Muestra 1)")) {
+                            let horaM1 = (turnoSel === "Turno 1") ? "07:00" : (turnoSel === "Turno 2") ? "15:00" : "23:00";
+                            nombreParametroForm = item.param.replace("(Muestra 1)", `(Muestra 1) ${horaM1}`);
+                        } else if (item.param.includes("(Muestra 2)")) {
+                            let horaM2 = (turnoSel === "Turno 1") ? "11:00" : (turnoSel === "Turno 2") ? "17:00" : "03:00";
+                            nombreParametroForm = item.param.replace("(Muestra 2)", `(Muestra 2) ${horaM2}`);
+                        }
+
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}"`;
                         
                         let inputHtml = (esSensorial || esEstado) ?
@@ -505,7 +516,7 @@
 
                         card += `
                             <div class="flex flex-col">
-                                <label class="text-xs font-semibold text-gray-700">${item.param}</label>
+                                <label class="text-xs font-semibold text-gray-700">${nombreParametroForm}</label>
                                 <div class="flex items-center space-x-2 mt-1">
                                     ${inputHtml}
                                     <span class="text-[10px] text-gray-500 italic whitespace-nowrap">${item.frecuencia} · Límite: ${item.limite}</span>
