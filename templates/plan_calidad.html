@@ -541,7 +541,6 @@
                 input.type = 'text';
                 input.value = 'NA';
             }
-            // Ocultar alerta de fuera de rango si estuviera abierta
             const containerId = input.dataset.containerId;
             const alertContainer = document.getElementById(containerId);
             if (alertContainer) alertContainer.classList.add('hidden');
@@ -644,15 +643,8 @@
                         const esEstado = item.tipo === "estado";
                         const esUV = item.param.toLowerCase().includes('intensidad') && item.param.toLowerCase().includes('uv');
 
-                        let nombreParametroForm = item.param;
-                        if (item.param.includes("(Muestra 1)")) {
-                            let horaM1 = (turnoSel === "Turno 1") ? "07:00" : (turnoSel === "Turno 2") ? "15:00" : "23:00";
-                            nombreParametroForm = item.param.replace("(Muestra 1)", `(Muestra 1) ${horaM1}`);
-                        } else if (item.param.includes("(Muestra 2)")) {
-                            let horaM2 = (turnoSel === "Turno 1") ? "11:00" : (turnoSel === "Turno 2") ? "17:00" : "03:00";
-                            nombreParametroForm = item.param.replace("(Muestra 2)", `(Muestra 2) ${horaM2}`);
-                        }
-
+                        // IMPORTANTE: Guardamos el parámetro puro original de la base de datos (item.param) 
+                        // para que el backend lo reconozca sin alteraciones de hora o texto extra.
                         const atributos = `data-zona="${zona}" data-param="${item.param}" data-limite="${item.limite}" data-frecuencia="${item.frecuencia}" data-container-id="${uniqueId}"`;
                         
                         let limiteTextoForm = esUV ? "Diario · Límite: > 25" : `Diario · Límite: ${item.limite}`;
@@ -668,7 +660,7 @@
                         card += `
                             <div class="bg-white p-3 rounded border shadow-sm relative">
                                 <div class="flex justify-between items-center mb-1">
-                                    <label class="block font-bold text-xs text-gray-700">${nombreParametroForm}</label>
+                                    <label class="block font-bold text-xs text-gray-700">${item.param}</label>
                                     <button type="button" onclick="establecerNA(this)" class="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded font-bold transition">N/A</button>
                                 </div>
                                 <div class="flex items-center space-x-2">
@@ -805,11 +797,11 @@
             let camposVacios = [];
 
             inputs.forEach(inp => {
-                const valor = inp.value.trim();
+                let valor = inp.value.trim();
                 const zona = inp.dataset.zona;
                 const parametro = inp.dataset.param;
 
-                // Validar si el campo quedó completamente vacío
+                // Si es un campo numérico y está vacío, poner "NA" o exigir llenado
                 if (!valor) {
                     camposVacios.push(`• [${zona}] ${parametro}`);
                     return;
@@ -829,27 +821,29 @@
                 }
 
                 mediciones.push({
-                    zona,
-                    parametro,
-                    limite,
-                    frecuencia,
-                    valor,
+                    zona: zona,
+                    parametro: parametro,
+                    limite: limite || "",
+                    frecuencia: frecuencia || "",
+                    valor: valor,
                     plan_accion: planAccion
                 });
             });
 
-            // Si hay campos vacíos, alertar al usuario detallando cuáles son
             if (camposVacios.length > 0) {
-                alert("⚠️ Los siguientes campos obligatorios están vacíos y deben ser diligenciados o marcados como N/A:\n\n" + camposVacios.join("\n"));
+                alert("⚠️ Los siguientes campos están vacíos. Por favor complete los valores o haga clic en N/A:\n\n" + camposVacios.join("\n"));
                 return;
             }
 
             const payload = {
-                fecha,
-                turno,
-                operador,
-                mediciones
+                fecha: fecha,
+                turno: turno,
+                operador: operador,
+                mediciones: mediciones
             };
+
+            // Imprimir en la consola del navegador para depuración exacta
+            console.log("Payload enviado al servidor:", JSON.stringify(payload, null, 2));
 
             try {
                 const res = await fetch('/api/plan-calidad/guardar', {
@@ -863,7 +857,9 @@
                     cerrarModalFormulario();
                     cargarTablaRegistros();
                 } else {
-                    alert("Error al guardar las mediciones.");
+                    const errData = await res.json().catch(() => ({}));
+                    console.error("Detalle del error del servidor:", errData);
+                    alert("Error al guardar las mediciones. Revisa la consola (F12) para más detalles.");
                 }
             } catch (err) {
                 console.error(err);
