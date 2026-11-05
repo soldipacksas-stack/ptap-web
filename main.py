@@ -40,8 +40,9 @@ MAESTRA_PLAN_CALIDAD = [('Entrada Agua Potable', 'Agua Fuente (Río)', 'Turno', 
 class ItemRegistro(BaseModel):
     zona: str
     parametro: str
-    valor: Any  # <--- MODIFICADO: Permite recibir flexibilidad de tipos y evita el error 422
+    valor: Any  
     limite: Optional[str] = "-"
+    plan_accion: Optional[str] = ""  # <--- Este campo es el que recibe el formulario HTML
 
 class PayloadGuardarPlan(BaseModel):
     fecha: str
