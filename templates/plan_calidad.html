@@ -408,31 +408,29 @@
                         <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                 `;
 
+                let skipNextCol = 0;
                 mapaColumnas.forEach((col, idx) => {
+                    if (skipNextCol > 0) {
+                        skipNextCol--;
+                        return; // Omitir la segunda celda del turno cuando está unificada con colspan="2"
+                    }
+
                     const horasDelTurno = HORAS_TURNO[col.turno];
-                    const esSegundaHora = horasDelTurno && horasDelTurno[1] === col.hora;
+                    const esPrimeraHora = horasDelTurno && horasDelTurno[0] === col.hora;
                     const esFrecuenciaUnaVez = item.frecuencia && item.frecuencia.toLowerCase().includes('1 vez turno');
 
                     let valMedido = undefined;
+                    const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
+                    valMedido = dictBusqueda[busquedaKey];
 
-                    if (esFrecuenciaUnaVez && esSegundaHora) {
-                        // Para parámetros de 1 vez por turno, la segunda hora del turno no lleva valor (queda limpia como en Excel)
-                        valMedido = undefined;
-                    } else {
-                        // Buscar valor normal para la celda
-                        const busquedaKey = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
-                        valMedido = dictBusqueda[busquedaKey];
+                    if (valMedido === undefined) {
+                        const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
+                        if (regGeneral) valMedido = regGeneral.valor;
+                    }
 
-                        if (valMedido === undefined) {
-                            const regGeneral = registrosBD.find(r => r.zona === item.zona && r.parametro === item.parametroLimpio && r.fecha === col.fecha && r.turno === col.turno);
-                            if (regGeneral) valMedido = regGeneral.valor;
-                        }
-
-                        if (valMedido === undefined) {
-                            const paramBusquedaEspecifica = esSegundaHora ? `${item.parametroLimpio} (Muestra 2)` : `${item.parametroLimpio} (Muestra 1)`;
-                            const regEspecifico = registrosBD.find(r => r.zona === item.zona && r.parametro === paramBusquedaEspecifica && r.fecha === col.fecha && r.turno === col.turno);
-                            if (regEspecifico) valMedido = regEspecifico.valor;
-                        }
+                    if (valMedido === undefined && !esFrecuenciaUnaVez) {
+                        const regEspecifico1 = registrosBD.find(r => r.zona === item.zona && r.parametro === `${item.parametroLimpio} (Muestra 1)` && r.fecha === col.fecha && r.turno === col.turno);
+                        if (regEspecifico1) valMedido = regEspecifico1.valor;
                     }
 
                     let displayTexto = valMedido !== undefined ? valMedido : 'NA';
@@ -446,12 +444,16 @@
                         estilo = 'text-gray-400 italic';
                     }
 
-                    if (esFrecuenciaUnaVez && esSegundaHora) {
-                        displayTexto = '-';
-                        estilo = 'text-gray-400 italic';
+                    if (esFrecuenciaUnaVez && esPrimeraHora) {
+                        // Unificar celdas con colspan="2" para 1 vez turno
+                        skipNextCol = 1; // Salta la segunda hora de este turno
+                        filaHTML += `<td colspan="2" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
+                    } else if (esFrecuenciaUnaVez && !esPrimeraHora) {
+                        // Si por alguna razón evaluamos la segunda hora directamente
+                        return;
+                    } else {
+                        filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
                     }
-
-                    filaHTML += `<td class="p-1.5 border border-gray-200 text-center font-mono text-xs ${estilo}">${displayTexto}</td>`;
                 });
 
                 filaHTML += `</tr>`;
