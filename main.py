@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, Request
+from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File, Form, Header
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -9,6 +9,13 @@ from collections import defaultdict
 import openpyxl
 import os
 import json
+import hashlib
+import hmac
+import secrets
+import subprocess
+import tempfile
+import zipfile
+from pathlib import Path
 
 from database import engine, Base, get_db
 import models
@@ -710,3 +717,80 @@ def guardar_plan_accion(payload: PayloadPlanAccion, db: Session = Depends(get_db
     db.add(nuevo)
     db.commit()
     return {"status": "ok", "message": "Plan de acción registrado correctamente."}
+
+
+# ============================================================
+# IMPORTACIÓN HISTÓRICA DESDE NAVEGADOR (ADMINISTRACIÓN)
+# Se exige un secreto configurado en Render; sin él no funciona.
+# La simulación no escribe en PostgreSQL. La carga exige una
+# confirmación y una vista previa del MISMO archivo.
+# ============================================================
+_IMPORT_ROOT = Path(__file__).resolve().parent
+_IMPORT_MAX_BYTES = 12 * 1024 * 1024
+
+
+def _import_auth(request: Request, clave: str):
+    expected = os.environ.get("PTAP_IMPORT_ADMIN_KEY", "")
+    if len(expected) < 24:
+        raise HTTPException(503, "Configure PTAP_IMPORT_ADMIN_KEY (mínimo 24 caracteres) en Render")
+    if not hmac.compare_digest(clave or "", expected):
+        raise HTTPException(403, "Clave de importación incorrecta")
+    # Las peticiones con escritura deben proceder del mismo sitio.
+    origin = request.headers.get("origin", "")
+    if not origin:
+        raise HTTPException(403, "Origen de solicitud no disponible")
+    from urllib.parse import urlparse
+    u = urlparse(origin)
+    if u.scheme not in ("https", "http") or u.netloc != request.url.netloc:
+        raise HTTPException(403, "Origen no autorizado")
+    return expected
+
+
+@app.get("/importar-registros", response_class=HTMLResponse)
+def vista_importar_registros(request: Request):
+    return templates.TemplateResponse(request, "importar_registros.html", {"request": request})
+
+
+@app.post("/api/importacion/analizar")
+async def analizar_importacion(request: Request, archivo: UploadFile = File(...),
+                              clave: str = Form(...), aplicar: str = Form("no"),
+                              confirmacion: str = Form(""), firma: str = Form("")):
+    secret = _import_auth(request, clave)
+    if not archivo.filename or not archivo.filename.lower().endswith(".xlsx"):
+        raise HTTPException(400, "Seleccione un archivo Excel .xlsx")
+    data = await archivo.read(_IMPORT_MAX_BYTES + 1)
+    if len(data) > _IMPORT_MAX_BYTES:
+        raise HTTPException(413, "Archivo demasiado grande (máximo 12 MB)")
+    if not zipfile.is_zipfile(__import__('io').BytesIO(data)):
+        raise HTTPException(400, "El archivo no es un XLSX válido")
+    with zipfile.ZipFile(__import__('io').BytesIO(data)) as z:
+        if sum(i.file_size for i in z.infolist()) > 45 * 1024 * 1024:
+            raise HTTPException(413, "Contenido XLSX descomprimido demasiado grande")
+    digest = hashlib.sha256(data).hexdigest()
+    expected_sig = hmac.new(secret.encode(), digest.encode(), hashlib.sha256).hexdigest()
+    write = aplicar == "si"
+    if write and (confirmacion != "IMPORTAR" or not hmac.compare_digest(firma, expected_sig)):
+        raise HTTPException(400, "Primero analice este mismo archivo y confirme IMPORTAR")
+    with tempfile.TemporaryDirectory(prefix="ptap-import-") as td:
+        xlsx = Path(td) / "fuente.xlsx"
+        report = Path(td) / "reporte.txt"
+        xlsx.write_bytes(data)
+        env = os.environ.copy()
+        env["PTAP_IMPORT_SOURCE"] = str(xlsx)
+        env["PTAP_IMPORT_REPORT"] = str(report)
+        try:
+            run = subprocess.run(
+                [__import__('sys').executable, str(_IMPORT_ROOT / "importar_noviembre.py")]
+                + (["--aplicar"] if write else []),
+                cwd=str(_IMPORT_ROOT), env=env, capture_output=True,
+                text=True, timeout=110,
+            )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(504, "La importación superó el tiempo permitido; revise el historial antes de reintentar")
+        if run.returncode != 0:
+            # No exponer rastros internos ni credenciales en respuestas públicas.
+            raise HTTPException(500, "No se completó la operación. Consulte los Logs de Render; no repita la carga sin verificar.")
+        content = report.read_text(encoding="utf-8") if report.exists() else run.stdout
+    return {"modo": "IMPORTACIÓN REAL" if write else "SIMULACIÓN SIN ESCRITURA",
+            "reporte": content, "firma": "" if write else expected_sig,
+            "hash_archivo": digest}
