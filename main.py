@@ -855,7 +855,12 @@ def _clave_operacion(request: Request):
         raise HTTPException(403, "Clave de administración incorrecta")
     origin = request.headers.get("origin")
     from urllib.parse import urlparse
-    if not origin or urlparse(origin).netloc != request.url.netloc:
+    # Las consultas GET del mismo origen pueden no enviar Origin en algunos navegadores.
+    # Para la vista previa PDF se acepta Referer del mismo host; nunca de otro dominio.
+    referer = request.headers.get("referer", "")
+    host = request.url.netloc
+    if not ((origin and urlparse(origin).netloc == host) or
+            (not origin and referer and urlparse(referer).netloc == host)):
         raise HTTPException(403, "Origen no autorizado")
 
 def _validar_operacional(modulo, payload):
@@ -993,65 +998,81 @@ def saldos_quimicos(db: Session = Depends(get_db)):
 
 @app.get("/api/reportes/plan-calidad.pdf")
 def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depends(get_db)):
-    """PDF imprimible: datos efectivamente registrados, separados por turno."""
+    """Formato diario similar a la matriz operacional: un parámetro por fila y tres turnos.
+    Los valores ausentes permanecen en blanco; nunca se simulan resultados.
+    """
     _clave_operacion(request)
     try:
         date.fromisoformat(fecha)
     except ValueError:
-        raise HTTPException(422, "Fecha inválida")
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, KeepTogether
+        raise HTTPException(status_code=422, detail="Fecha inválida")
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
-    rows = db.query(models.RegistroPlanCalidad).filter_by(fecha=fecha).order_by(
-        models.RegistroPlanCalidad.turno, models.RegistroPlanCalidad.zona,
-        models.RegistroPlanCalidad.parametro).all()
-    output=io.BytesIO()
-    doc=SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=13*mm,
-                          leftMargin=13*mm, topMargin=13*mm, bottomMargin=13*mm)
-    styles=getSampleStyleSheet()
-    story=[Paragraph("PTAP | PLAN DE CALIDAD - REGISTRO DIARIO",styles["Title"]),
-           Paragraph("Fecha: " + fecha + " | Registros almacenados: " + str(len(rows)),styles["Normal"]),Spacer(1,8)]
-    for turno in ("Turno 1", "Turno 2", "Turno 3"):
-        sub=[r for r in rows if r.turno == turno]
-        story.append(Paragraph(turno + " - " + str(len(sub)) + " mediciones",styles["Heading2"]))
-        data=[["Zona / Punto", "Parámetro", "Valor", "Resultado", "Límite", "Operador"]]
-        for r in sub:
-            def clean(x,n=58):
-                return (str(x or "")[:n]).replace("&","&amp;").replace("<","&lt;")
-            data.append([Paragraph(clean(r.zona,65),styles["BodyText"]),
-                         Paragraph(clean(r.parametro,65),styles["BodyText"]),
-                         clean(r.valor,22),clean(r.resultado,22),clean(r.limite,22),
-                         Paragraph(clean(r.operador,38),styles["BodyText"])])
-        if not sub: data.append(["Sin mediciones registradas", "", "", "", "", ""])
-        table=Table(data,colWidths=[66*mm,67*mm,27*mm,32*mm,30*mm,48*mm],repeatRows=1)
-        table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#102e52")),
-            ("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),
-            ("VALIGN",(0,0),(-1,-1),"TOP"),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#ccd6e0")),
-            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f2f6fb")]),
-            ("BOTTOMPADDING",(0,0),(-1,-1),6)]))
-        story.append(table);story.append(Spacer(1,10))
-    doc.build(story)
+    from xml.sax.saxutils import escape
+    registros = db.query(models.RegistroPlanCalidad).filter_by(fecha=fecha).all()
+    por_clave = {(r.zona, r.parametro, r.turno): r for r in registros}
+    output = io.BytesIO()
+    doc = SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=9*mm,
+                            leftMargin=9*mm, topMargin=10*mm, bottomMargin=11*mm)
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle('CeldaPTAP', parent=styles['Normal'], fontSize=7, leading=9)
+    small = ParagraphStyle('PequenaPTAP', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_CENTER)
+    verde = colors.HexColor('#0B4934')
+    verde_claro = colors.HexColor('#DCE9E3')
+    gris = colors.HexColor('#9AAAB0')
+    def cell(x):
+        return Paragraph(escape(str(x or '')), normal)
+    def header_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setStrokeColor(gris)
+        canvas.line(9*mm, 9*mm, 288*mm, 9*mm)
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(verde)
+        canvas.drawString(10*mm, 6*mm, 'PTAP | Control operacional | Documento generado desde registros PostgreSQL')
+        canvas.drawRightString(286*mm, 6*mm, f'Página {doc.page}')
+        canvas.restoreState()
+    story = [Paragraph('ZFC-GCA-FOR-003 | FORMATO CONTROL OPERACIONAL PTAP', styles['Title']),
+             Paragraph('Referencia visual: V5 · Fecha: ' + fecha + ' · Turnos 1, 2 y 3', styles['Normal']),
+             Spacer(1, 7)]
+    # El orden se toma de la maestra oficial del programa, no del orden de inserción.
+    grupos = defaultdict(list)
+    for zona, parametro, frecuencia, dia, turno_programado, limite, tipo in MAESTRA_PLAN_CALIDAD:
+        grupos[zona].append((parametro, frecuencia, limite))
+    for zona, parametros in grupos.items():
+        story.append(Paragraph(escape(zona), styles['Heading3']))
+        data = [[cell('Punto / Parámetro'),cell('Frecuencia'),cell('Especificación'),
+                 cell('Turno 1'),cell('Turno 2'),cell('Turno 3')]]
+        for parametro, frecuencia, limite in parametros:
+            valores = []
+            for turno in ('Turno 1','Turno 2','Turno 3'):
+                r = por_clave.get((zona, parametro, turno))
+                valores.append(cell(r.valor if r else ''))
+            data.append([cell(parametro),cell(frecuencia),cell(limite),*valores])
+        table = Table(data, colWidths=[88*mm,35*mm,43*mm,35*mm,35*mm,35*mm],repeatRows=1,hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,0),verde),('TEXTCOLOR',(0,0),(-1,0),colors.white),
+            ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F3F7F5')]),
+            ('GRID',(0,0),(-1,-1),.25,gris),('VALIGN',(0,0),(-1,-1),'TOP'),
+            ('LEFTPADDING',(0,0),(-1,-1),5),('RIGHTPADDING',(0,0),(-1,-1),5),
+            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4)
+        ]))
+        # Los párrafos tienen color propio: establecer estilo de encabezado claro.
+        for c in data[0]: c.style = ParagraphStyle('CabeceraPTAP',parent=normal,textColor=colors.white,fontName='Helvetica-Bold')
+        story.extend([table,Spacer(1,9)])
+    story.append(Spacer(1,8))
+    firmas = Table([[cell('Responsable Turno 1: __________________'),cell('Responsable Turno 2: __________________'),cell('Responsable Turno 3: __________________')]],colWidths=[90*mm]*3)
+    story.append(firmas)
+    doc.build(story,onFirstPage=header_footer,onLaterPages=header_footer)
     output.seek(0)
-    return StreamingResponse(output, media_type="application/pdf", headers={
-        "Content-Disposition": 'attachment; filename="PTAP_plan_calidad_'+fecha+'.pdf"',
-        "Cache-Control":"no-store"})
+    return StreamingResponse(output,media_type='application/pdf',headers={
+        'Content-Disposition':f'inline; filename="PTAP_control_operacional_{fecha}.pdf"',
+        'Cache-Control':'no-store'})
 
 
 @app.get("/reportes/plan-calidad", response_class=HTMLResponse)
-def pantalla_reporte_diario():
-    return HTMLResponse("""<!doctype html><html lang=es><meta charset=utf-8><title>Impresión diaria PTAP</title>
-    <style>body{font:16px Segoe UI,Arial;background:#f4f7fb;color:#17304f;max-width:640px;margin:6vh auto;padding:20px}main{background:white;padding:28px;border-radius:14px}input,button{display:block;width:100%;padding:12px;margin:10px 0;box-sizing:border-box}button{background:#124e86;color:white;border:0;border-radius:8px;cursor:pointer}</style>
-    <main><a href=/plan-calidad>← Volver al Plan de Calidad</a><h1>Impresión diaria</h1>
-    <p>Genera un PDF con los datos realmente almacenados para los tres turnos de una fecha.</p>
-    <label>Fecha<input type=date id=fecha required></label><label>Clave de administración<input type=password id=clave required></label>
-    <button onclick=generar()>Generar PDF</button><p id=estado role=status></p></main>
-    <script>document.getElementById('fecha').value=new Date().toLocaleDateString('en-CA');
-    async function generar(){const f=document.getElementById('fecha').value,k=document.getElementById('clave').value;
-    if(!f||!k){document.getElementById('estado').textContent='Complete fecha y clave';return}
-    try{let r=await fetch('/api/reportes/plan-calidad.pdf?fecha='+encodeURIComponent(f),{headers:{'x-ptap-admin-key':k}});
-    if(!r.ok){let j=await r.json();throw Error(j.detail||'No se pudo generar el PDF')}
-    const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='PTAP_plan_calidad_'+f+'.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
-    document.getElementById('estado').textContent='PDF generado';}catch(e){document.getElementById('estado').textContent=e.message}}</script></html>""")
+def pantalla_reporte_diario(request: Request):
+    return templates.TemplateResponse(request,'impresion_formatos.html',{'request':request})
