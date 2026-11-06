@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File, Form, Header
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,6 +15,8 @@ import secrets
 import subprocess
 import tempfile
 import zipfile
+import io
+import math
 from pathlib import Path
 
 from database import engine, Base, get_db
@@ -794,3 +796,262 @@ async def analizar_importacion(request: Request, archivo: UploadFile = File(...)
     return {"modo": "IMPORTACIÓN REAL" if write else "SIMULACIÓN SIN ESCRITURA",
             "reporte": content, "firma": "" if write else expected_sig,
             "hash_archivo": digest}
+
+
+# ==========================================================
+# MÓDULOS COMPLEMENTARIOS - PostgreSQL
+# Módulos nuevos: no se altera ni borra ninguna tabla anterior.
+# ==========================================================
+MODULOS_COMPLEMENTARIOS = {
+ "laboratorio": {"titulo":"Verificación de Equipos de Laboratorio", "campos":[
+  ["instrumento","Instrumento","select","pH-metro|Conductivímetro|Turbidímetro"],
+  ["patron","Patrón de verificación","text"], ["lectura","Lectura obtenida","text"],
+  ["pendiente","Pendiente / slope","text"], ["resultado","Resultado","select","Cumple|No cumple|Pendiente"],
+  ["observaciones","Observaciones","textarea"]]},
+ "inventario": {"titulo":"Inventario de Químicos", "campos":[
+  ["quimico","Producto químico","text"], ["movimiento","Movimiento","select","Saldo inicial|Entrada|Consumo"],
+  ["cantidad","Cantidad","number"], ["unidad","Unidad","text"],
+  ["stock_minimo","Stock mínimo","number"], ["observaciones","Observaciones","textarea"]]},
+ "cip": {"titulo":"Registro CIP", "campos":[
+  ["linea","Línea","select","Cervecera AWT|Servicios SW1|Envasado"],
+  ["hora_inicio","Hora inicio","time"], ["hora_final","Hora final","time"],
+  ["ph_final","pH enjuague final","text"], ["responsables","Responsables (varios)","text"],
+  ["principal_mezclado","Principal - Mezclado inicial (%)","number"],
+  ["trimeta_mezclado","Trimeta - Mezclado inicial (%)","number"],
+  ["principal_circulacion","Principal - Circulación (%)","number"],
+  ["trimeta_circulacion","Trimeta - Circulación (%)","number"],
+  ["principal_etapa3","Principal - Etapa 3 (%)","number"],
+  ["trimeta_etapa3","Trimeta - Etapa 3 (%)","number"],
+  ["principal_final","Principal - Etapa final (%)","number"],
+  ["trimeta_final","Trimeta - Etapa final (%)","number"],
+  ["observaciones","Observaciones","textarea"]]},
+ "muestreo-compuesto": {"titulo":"Muestreo Compuesto PTAP (Laboratorio Externo)", "campos":[
+  ["laboratorio","Laboratorio externo","text"], ["informe","Número de informe","text"],
+  ["punto","Punto de muestreo","select","Entrada Agua Potable|Tratamiento UV Agua Cervecera|Tratamiento UV Agua Servicios"],
+  ["parametro","Parámetro","text"], ["resultado","Resultado","text"],
+  ["unidad","Unidad","text"], ["especificacion","Especificación","text"],
+  ["cumplimiento","Cumplimiento","select","Cumple|No cumple|Pendiente"],
+  ["observaciones","Observaciones","textarea"]]},
+ "bitacora-nueva": {"titulo":"Bitácora Operacional (PostgreSQL)", "campos":[
+  ["reporte","Actividades y novedades","textarea"],
+  ["requiere_atencion","Requiere seguimiento","select","No|Sí"],
+  ["estado","Estado","select","Pendiente|En seguimiento|Solucionada"],
+  ["observaciones","Observaciones de seguimiento","textarea"]]},
+}
+
+class PayloadRegistroOperacional(BaseModel):
+    fecha: str
+    turno: str = ""
+    operador: str = ""
+    equipo: str = ""
+    datos: dict[str, Any]
+
+def _clave_operacion(request: Request):
+    expected = os.environ.get("PTAP_IMPORT_ADMIN_KEY", "")
+    supplied = request.headers.get("x-ptap-admin-key", "")
+    if len(expected) < 24:
+        raise HTTPException(503, "Configure PTAP_IMPORT_ADMIN_KEY en Render")
+    if not hmac.compare_digest(expected, supplied):
+        raise HTTPException(403, "Clave de administración incorrecta")
+    origin = request.headers.get("origin")
+    from urllib.parse import urlparse
+    if not origin or urlparse(origin).netloc != request.url.netloc:
+        raise HTTPException(403, "Origen no autorizado")
+
+def _validar_operacional(modulo, payload):
+    if modulo not in MODULOS_COMPLEMENTARIOS:
+        raise HTTPException(404, "Módulo no encontrado")
+    try:
+        date.fromisoformat(payload.fecha)
+    except ValueError:
+        raise HTTPException(422, "Fecha inválida")
+    permitidos = {c[0] for c in MODULOS_COMPLEMENTARIOS[modulo]["campos"]}
+    if not isinstance(payload.datos, dict) or set(payload.datos) - permitidos:
+        raise HTTPException(422, "Campos no admitidos")
+    if len(json.dumps(payload.datos, ensure_ascii=False)) > 25000:
+        raise HTTPException(422, "Registro demasiado grande")
+    for campo in MODULOS_COMPLEMENTARIOS[modulo]["campos"]:
+        v = payload.datos.get(campo[0])
+        if v is not None and not isinstance(v, (str, int, float, bool)):
+            raise HTTPException(422, "Valor inválido: " + campo[0])
+        if campo[2] == "select" and v not in (None, "") and str(v) not in campo[3].split("|"):
+            raise HTTPException(422, "Opción inválida: " + campo[0])
+        if campo[2] == "number" and v not in (None, ""):
+            try:
+                n = float(v)
+                if not (-1e12 < n < 1e12): raise ValueError()
+                if modulo == "inventario" and campo[0] in ("cantidad", "stock_minimo") and n < 0: raise ValueError()
+            except (ValueError, TypeError):
+                raise HTTPException(422, "Número inválido: " + campo[0])
+    if modulo == "inventario":
+        if not str(payload.datos.get("quimico") or "").strip():
+            raise HTTPException(422, "Indique el producto químico")
+        if payload.datos.get("movimiento") not in ("Saldo inicial", "Entrada", "Consumo"):
+            raise HTTPException(422, "Indique el tipo de movimiento")
+        if not payload.datos.get("cantidad") or float(payload.datos["cantidad"]) <= 0:
+            raise HTTPException(422, "La cantidad debe ser mayor que cero")
+    if modulo == "cip":
+        inicio, fin = payload.datos.get("hora_inicio"), payload.datos.get("hora_final")
+        if inicio and fin:
+            try:
+                h1=datetime.strptime(inicio, "%H:%M")
+                h2=datetime.strptime(fin, "%H:%M")
+            except ValueError:
+                raise HTTPException(422, "Horas CIP inválidas")
+            minutos=int((h2-h1).total_seconds()/60) % 1440
+            if minutos == 0:
+                raise HTTPException(422, "La duración CIP debe ser mayor que cero")
+    if modulo == "muestreo-compuesto" and not payload.datos.get("parametro"):
+        raise HTTPException(422, "Indique el parámetro")
+
+def _salida_operacional(r):
+    return {"id":r.id,"modulo":r.modulo,"fecha":r.fecha,"turno":r.turno,
+            "operador":r.operador,"equipo":r.equipo,"datos":json.loads(r.datos_json),
+            "creado_en":r.creado_en.isoformat() if r.creado_en else None}
+
+@app.get("/operacion/{modulo}", response_class=HTMLResponse)
+def pagina_operacional(modulo: str, request: Request):
+    if modulo not in MODULOS_COMPLEMENTARIOS:
+        raise HTTPException(404, "Módulo no encontrado")
+    return templates.TemplateResponse(request, "operacion.html", {
+        "request":request,"modulo":modulo,"config":MODULOS_COMPLEMENTARIOS[modulo],
+        "operadores":OPERADORES_PTAP})
+
+@app.get("/api/operacion/{modulo}")
+def listar_operacional(modulo: str, desde: Optional[str] = None, hasta: Optional[str] = None,
+                       db: Session = Depends(get_db)):
+    if modulo not in MODULOS_COMPLEMENTARIOS: raise HTTPException(404)
+    q = db.query(models.RegistroOperacional).filter_by(modulo=modulo)
+    if desde: q=q.filter(models.RegistroOperacional.fecha >= desde)
+    if hasta: q=q.filter(models.RegistroOperacional.fecha <= hasta)
+    registros=q.order_by(models.RegistroOperacional.fecha.desc(), models.RegistroOperacional.id.desc()).limit(1500).all()
+    return {"data":[_salida_operacional(r) for r in registros]}
+
+def _validar_saldo_inventario(db: Session, payload: PayloadRegistroOperacional, excluir_id=None):
+    if not payload.datos.get("quimico"):
+        return
+    producto = str(payload.datos["quimico"]).strip().casefold()
+    movimientos = db.query(models.RegistroOperacional).filter_by(modulo="inventario").all()
+    saldo = 0.0
+    for r in movimientos:
+        if excluir_id is not None and r.id == excluir_id:
+            continue
+        d = json.loads(r.datos_json)
+        if str(d.get("quimico") or "").strip().casefold() != producto:
+            continue
+        cantidad = float(d.get("cantidad") or 0)
+        saldo += -cantidad if d.get("movimiento") == "Consumo" else cantidad
+    cantidad_nueva = float(payload.datos.get("cantidad") or 0)
+    saldo += -cantidad_nueva if payload.datos.get("movimiento") == "Consumo" else cantidad_nueva
+    if saldo < -1e-8:
+        raise HTTPException(409, "Movimiento rechazado: dejaría existencias negativas")
+
+@app.post("/api/operacion/{modulo}")
+def crear_operacional(modulo: str, payload: PayloadRegistroOperacional,
+                     request: Request, db: Session = Depends(get_db)):
+    _clave_operacion(request); _validar_operacional(modulo,payload)
+    if modulo == "inventario": _validar_saldo_inventario(db, payload)
+    r=models.RegistroOperacional(modulo=modulo,fecha=payload.fecha,turno=payload.turno,
+       operador=payload.operador,equipo=payload.equipo,datos_json=json.dumps(payload.datos,ensure_ascii=False))
+    db.add(r); db.commit(); db.refresh(r)
+    return {"status":"ok","id":r.id}
+
+@app.put("/api/operacion/{modulo}/{registro_id}")
+def modificar_operacional(modulo: str, registro_id: int, payload: PayloadRegistroOperacional,
+                         request: Request, db: Session = Depends(get_db)):
+    _clave_operacion(request); _validar_operacional(modulo,payload)
+    r=db.query(models.RegistroOperacional).filter_by(id=registro_id,modulo=modulo).first()
+    if not r: raise HTTPException(404,"Registro no encontrado")
+    if modulo == "inventario": _validar_saldo_inventario(db, payload, excluir_id=registro_id)
+    r.fecha=payload.fecha; r.turno=payload.turno; r.operador=payload.operador
+    r.equipo=payload.equipo; r.datos_json=json.dumps(payload.datos,ensure_ascii=False)
+    db.commit(); return {"status":"ok"}
+
+@app.delete("/api/operacion/{modulo}/{registro_id}")
+def borrar_operacional(modulo: str, registro_id: int, request: Request,
+                       db: Session = Depends(get_db)):
+    _clave_operacion(request)
+    if modulo not in MODULOS_COMPLEMENTARIOS: raise HTTPException(404)
+    r=db.query(models.RegistroOperacional).filter_by(id=registro_id,modulo=modulo).first()
+    if not r: raise HTTPException(404,"Registro no encontrado")
+    db.delete(r); db.commit(); return {"status":"eliminado"}
+
+@app.get("/api/inventario/saldos")
+def saldos_quimicos(db: Session = Depends(get_db)):
+    rows=db.query(models.RegistroOperacional).filter_by(modulo="inventario").order_by(models.RegistroOperacional.fecha,models.RegistroOperacional.id).all()
+    saldos={}
+    for r in rows:
+        d=json.loads(r.datos_json); producto=(d.get("quimico") or "").strip()
+        if not producto: continue
+        estado=saldos.setdefault(producto,{"quimico":producto,"saldo":0,"unidad":d.get("unidad") or "","minimo":0})
+        cantidad=float(d.get("cantidad") or 0)
+        estado["saldo"]+= -cantidad if d.get("movimiento")=="Consumo" else cantidad
+        if d.get("stock_minimo") not in (None,""): estado["minimo"]=float(d["stock_minimo"])
+        estado["alerta"]=estado["saldo"] < estado["minimo"]
+    return {"data":list(saldos.values())}
+
+
+@app.get("/api/reportes/plan-calidad.pdf")
+def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depends(get_db)):
+    """PDF imprimible: datos efectivamente registrados, separados por turno."""
+    _clave_operacion(request)
+    try:
+        date.fromisoformat(fecha)
+    except ValueError:
+        raise HTTPException(422, "Fecha inválida")
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, KeepTogether
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    rows = db.query(models.RegistroPlanCalidad).filter_by(fecha=fecha).order_by(
+        models.RegistroPlanCalidad.turno, models.RegistroPlanCalidad.zona,
+        models.RegistroPlanCalidad.parametro).all()
+    output=io.BytesIO()
+    doc=SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=13*mm,
+                          leftMargin=13*mm, topMargin=13*mm, bottomMargin=13*mm)
+    styles=getSampleStyleSheet()
+    story=[Paragraph("PTAP | PLAN DE CALIDAD - REGISTRO DIARIO",styles["Title"]),
+           Paragraph("Fecha: " + fecha + " | Registros almacenados: " + str(len(rows)),styles["Normal"]),Spacer(1,8)]
+    for turno in ("Turno 1", "Turno 2", "Turno 3"):
+        sub=[r for r in rows if r.turno == turno]
+        story.append(Paragraph(turno + " - " + str(len(sub)) + " mediciones",styles["Heading2"]))
+        data=[["Zona / Punto", "Parámetro", "Valor", "Resultado", "Límite", "Operador"]]
+        for r in sub:
+            def clean(x,n=58):
+                return (str(x or "")[:n]).replace("&","&amp;").replace("<","&lt;")
+            data.append([Paragraph(clean(r.zona,65),styles["BodyText"]),
+                         Paragraph(clean(r.parametro,65),styles["BodyText"]),
+                         clean(r.valor,22),clean(r.resultado,22),clean(r.limite,22),
+                         Paragraph(clean(r.operador,38),styles["BodyText"])])
+        if not sub: data.append(["Sin mediciones registradas", "", "", "", "", ""])
+        table=Table(data,colWidths=[66*mm,67*mm,27*mm,32*mm,30*mm,48*mm],repeatRows=1)
+        table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#102e52")),
+            ("TEXTCOLOR",(0,0),(-1,0),colors.white),("FONTSIZE",(0,0),(-1,-1),8),
+            ("VALIGN",(0,0),(-1,-1),"TOP"),("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#ccd6e0")),
+            ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#f2f6fb")]),
+            ("BOTTOMPADDING",(0,0),(-1,-1),6)]))
+        story.append(table);story.append(Spacer(1,10))
+    doc.build(story)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/pdf", headers={
+        "Content-Disposition": 'attachment; filename="PTAP_plan_calidad_'+fecha+'.pdf"',
+        "Cache-Control":"no-store"})
+
+
+@app.get("/reportes/plan-calidad", response_class=HTMLResponse)
+def pantalla_reporte_diario():
+    return HTMLResponse("""<!doctype html><html lang=es><meta charset=utf-8><title>Impresión diaria PTAP</title>
+    <style>body{font:16px Segoe UI,Arial;background:#f4f7fb;color:#17304f;max-width:640px;margin:6vh auto;padding:20px}main{background:white;padding:28px;border-radius:14px}input,button{display:block;width:100%;padding:12px;margin:10px 0;box-sizing:border-box}button{background:#124e86;color:white;border:0;border-radius:8px;cursor:pointer}</style>
+    <main><a href=/plan-calidad>← Volver al Plan de Calidad</a><h1>Impresión diaria</h1>
+    <p>Genera un PDF con los datos realmente almacenados para los tres turnos de una fecha.</p>
+    <label>Fecha<input type=date id=fecha required></label><label>Clave de administración<input type=password id=clave required></label>
+    <button onclick=generar()>Generar PDF</button><p id=estado role=status></p></main>
+    <script>document.getElementById('fecha').value=new Date().toLocaleDateString('en-CA');
+    async function generar(){const f=document.getElementById('fecha').value,k=document.getElementById('clave').value;
+    if(!f||!k){document.getElementById('estado').textContent='Complete fecha y clave';return}
+    try{let r=await fetch('/api/reportes/plan-calidad.pdf?fecha='+encodeURIComponent(f),{headers:{'x-ptap-admin-key':k}});
+    if(!r.ok){let j=await r.json();throw Error(j.detail||'No se pudo generar el PDF')}
+    const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='PTAP_plan_calidad_'+f+'.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
+    document.getElementById('estado').textContent='PDF generado';}catch(e){document.getElementById('estado').textContent=e.message}}</script></html>""")

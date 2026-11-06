@@ -99,3 +99,17 @@ class RegistroImportacionOrigen(Base):
     modulo = Column(String(60), nullable=False)
     registro_id = Column(Integer, nullable=False)
     creado_en = Column(DateTime, default=datetime.now)
+
+
+# Registros independientes de nuevos módulos. No modifica tablas históricas.
+class RegistroOperacional(Base):
+    __tablename__ = "ptap_registros_operacionales"
+    id = Column(Integer, primary_key=True)
+    modulo = Column(String(50), nullable=False, index=True)
+    fecha = Column(String(10), nullable=False, index=True)
+    turno = Column(String(20), nullable=True)
+    operador = Column(String(150), nullable=True)
+    equipo = Column(String(150), nullable=True)
+    datos_json = Column(Text, nullable=False)
+    creado_en = Column(DateTime, default=datetime.now)
+    actualizado_en = Column(DateTime, default=datetime.now, onupdate=datetime.now)
