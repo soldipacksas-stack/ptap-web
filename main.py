@@ -3,8 +3,9 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import List, Optional, Any
+from collections import defaultdict
 import openpyxl
 import os
 
@@ -74,7 +75,61 @@ class PayloadExcepcion(BaseModel):
     estado: str
     observacion: Optional[str] = ""
 
+
+# DASHBOARD GERENCIAL: endpoints de solo lectura.
 @app.get("/", response_class=HTMLResponse)
+def vista_dashboard(request: Request):
+    return templates.TemplateResponse(request, "dashboard.html", {"request": request})
+
+@app.get("/api/dashboard/resumen")
+def api_dashboard_resumen(desde: Optional[str] = None, hasta: Optional[str] = None,
+                          turno: str = "Todos", zona: str = "Todas",
+                          db: Session = Depends(get_db)):
+    try:
+        fin = date.fromisoformat(hasta) if hasta else date.today()
+        inicio = date.fromisoformat(desde) if desde else fin - timedelta(days=29)
+    except ValueError:
+        raise HTTPException(422, "Fecha inválida; use AAAA-MM-DD")
+    if inicio > fin or (fin - inicio).days > 366:
+        raise HTTPException(422, "Rango de fechas inválido")
+    q = db.query(models.RegistroPlanCalidad).filter(
+        models.RegistroPlanCalidad.fecha >= inicio.isoformat(),
+        models.RegistroPlanCalidad.fecha <= fin.isoformat())
+    if turno != "Todos":
+        q = q.filter(models.RegistroPlanCalidad.turno == turno)
+    if zona != "Todas":
+        q = q.filter(models.RegistroPlanCalidad.zona == zona)
+    registros = q.all()
+    estados_validos = {"cumple", "fuera de rango", "no cumple"}
+    validos = [r for r in registros if (r.resultado or "").strip().lower() in estados_validos]
+    conformes = sum((r.resultado or "").strip().lower() == "cumple" for r in validos)
+    series = defaultdict(lambda: [0, 0])
+    areas = defaultdict(lambda: [0, 0])
+    for r in validos:
+        ok = int((r.resultado or "").strip().lower() == "cumple")
+        series[r.fecha][0] += ok; series[r.fecha][1] += 1
+        areas[r.zona][0] += ok; areas[r.zona][1] += 1
+    # La programación de análisis exige reconciliación con cada medición
+    # esperada; no publicar un porcentaje de ejecución sin ese cálculo.
+    alertas = [{"id": r.id, "fecha": r.fecha, "turno": r.turno,
+                "zona": r.zona, "parametro": r.parametro,
+                "valor": r.valor, "limite": r.limite}
+               for r in registros if (r.resultado or "").strip().lower() in
+               {"fuera de rango", "no cumple"}]
+    alertas.sort(key=lambda x: (x["fecha"], x["id"]), reverse=True)
+    return {"desde": inicio.isoformat(), "hasta": fin.isoformat(),
+            "registros": len(registros), "validos": len(validos),
+            "conformes": conformes, "no_conformes": len(validos)-conformes,
+            "cumplimiento": round(conformes*100/len(validos), 1) if validos else None,
+            "ejecucion": None, "pendientes": None,
+            "tendencia": [{"fecha": k, "porcentaje": round(v[0]*100/v[1],1)}
+                          for k,v in sorted(series.items())],
+            "zonas": [{"zona": k, "porcentaje": round(v[0]*100/v[1],1)}
+                      for k,v in sorted(areas.items())],
+            "alertas": alertas[:12],
+            "zonas_disponibles": sorted({r[0] for r in MAESTRA_PLAN_CALIDAD})}
+
+@app.get("/plan-calidad", response_class=HTMLResponse)
 def vista_plan_calidad(request: Request):
     return templates.TemplateResponse(request, "plan_calidad.html", {
         "operadores": OPERADORES_PTAP,
