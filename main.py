@@ -8,6 +8,7 @@ from typing import List, Optional, Any
 from collections import defaultdict
 import openpyxl
 import os
+import json
 
 from database import engine, Base, get_db
 import models
@@ -35,7 +36,7 @@ OPERADORES_PTAP = [
 ]
 
 # Maestra del Plan de Calidad PTAP (108 registros oficiales de la matriz)
-MAESTRA_PLAN_CALIDAD = [('Entrada Agua Potable', 'Agua Fuente (Río)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 1)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 2)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 3)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Cloro residual (Muestra 1)', 'Turno', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Entrada Agua Potable', 'Cloro residual (Muestra 2)', 'Turno', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Entrada Agua Potable', 'pH', 'Turno', 'Todos', 'Todos', '6,5 - 7,5', 'numero'), ('Entrada Agua Potable', 'Hierro total (Fe)', 'Diario', 'Todos', 'Turno 1', '0 - 0,1', 'numero'), ('Entrada Agua Potable', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Entrada Agua Potable', 'Turbiedad (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Entrada Agua Potable', 'Turbiedad (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Entrada Agua Potable', 'Sólidos disueltos totales (TDS)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Entrada Agua Potable', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Entrada Agua Potable', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Entrada Agua Potable', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '0 - 100', 'numero'), ('Entrada Agua Potable', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 250', 'numero'), ('Entrada Agua Potable', 'Diferencial de Presión Filtro 1', 'Semanal', 'Miércoles', 'Turno 1', '0 - 10', 'numero'), ('Entrada Agua Potable', 'Diferencial de Presión Filtro 2', 'Semanal', 'Miércoles', 'Turno 1', '0 - 10', 'numero'), ('Entrada Agua Potable', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Entrada Agua Potable', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Entrada Agua Potable', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Entrada Agua Potable', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 1)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 2)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 3)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Rio)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Entrada agua potable)', 'Semanal', 'Miércoles', 'Turno 2', '0 - 5', 'numero'), ('Agua potable para Servicios Generales', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '0,5 - 2', 'numero'), ('Casino principal', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Baño envasado', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Casino Postobón', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Agua Suavizada', 'Dureza Total', 'Diario', 'Todos', 'Turno 1', '0 - 5', 'numero'), ('Agua Suavizada', 'pH', 'Diario', 'Todos', 'Turno 1', '6,5 - 8', 'numero'), ('Agua Suavizada', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Agua Suavizada', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Agua Suavizada', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Agua Suavizada', 'Solidos disueltos totales (TDS)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Almacenamiento de agua potable para proceso', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tanque de almacenamiento PTAP cervecera', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Tanque de almacenamiento PTAP cervecera', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 3', 'numero'), ('Tanque de almacenamiento PATP Servicios', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Tanque de almacenamiento PATP Servicios', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 3', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C1', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C2', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C3', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C1', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C2', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C3', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Cloro residual (Lab)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Cloro residual (Linea)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Concentración dioxido de cloro (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua cervecera', 'Concentración dioxido de cloro (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua cervecera', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 2', 'numero'), ('Salida tren filtros agua de servicios', 'Cloro residual (Lab)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua de servicios', 'Cloro residual (Linea)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua de servicios', 'Concentración dioxido de cloro (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua de servicios', 'Concentración dioxido de cloro (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'pH (Muestra 1)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'pH (Muestra 2)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Intensidad lampara UV 1', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Intensidad lampara UV 2', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 70', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Solidos disueltos totales', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Dióxido de Cloro', 'Diario', 'Todos', 'Todos', '0 - 0,4', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'pH (Muestra 1)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'pH (Muestra 2)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Intensidad lampara UV 1', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '< 90 ppm', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 70', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Solidos disueltos totales', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Cuarto generación dióxido de cloro', 'Nivel de los tanques buffer', 'Diario', 'Todos', 'Todos', 'Cumple / No cumple', 'estado')]
+MAESTRA_PLAN_CALIDAD = [('Entrada Agua Potable', 'Agua Fuente (Río)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 1)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 2)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Agua Fuente (Pozo 3)', 'Turno', 'Todos', 'Todos', '%', 'numero'), ('Entrada Agua Potable', 'Cloro residual (Muestra 1)', 'Turno', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Entrada Agua Potable', 'Cloro residual (Muestra 2)', 'Turno', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Entrada Agua Potable', 'pH', 'Turno', 'Todos', 'Todos', '6,5 - 7,5', 'numero'), ('Entrada Agua Potable', 'Hierro total (Fe)', 'Diario', 'Todos', 'Turno 1', '0 - 0,1', 'numero'), ('Entrada Agua Potable', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Entrada Agua Potable', 'Turbiedad (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Entrada Agua Potable', 'Turbiedad (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Entrada Agua Potable', 'Sólidos disueltos totales (TDS)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Entrada Agua Potable', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Entrada Agua Potable', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Entrada Agua Potable', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '0 - 100', 'numero'), ('Entrada Agua Potable', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 250', 'numero'), ('Entrada Agua Potable', 'Diferencial de Presión Filtro 1', 'Semanal', 'Miércoles', 'Turno 1', '0 - 10', 'numero'), ('Entrada Agua Potable', 'Diferencial de Presión Filtro 2', 'Semanal', 'Miércoles', 'Turno 1', '0 - 10', 'numero'), ('Entrada Agua Potable', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Entrada Agua Potable', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Entrada Agua Potable', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Entrada Agua Potable', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 1)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 2)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Pozo 3)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Rio)', '2 veces al mes', 'Jueves', 'Turno 2', '0 - 10', 'numero'), ('Entrada Agua Potable', 'COT (Entrada agua potable)', 'Semanal', 'Miércoles', 'Turno 2', '0 - 5', 'numero'), ('Agua potable para Servicios Generales', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '0,5 - 2', 'numero'), ('Casino principal', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Baño envasado', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Casino Postobón', 'Cloro residual', 'Semanal', 'Jueves', 'Turno 1', '0,5 - 2', 'numero'), ('Agua Suavizada', 'Dureza Total', 'Diario', 'Todos', 'Turno 1', '0 - 5', 'numero'), ('Agua Suavizada', 'pH', 'Diario', 'Todos', 'Turno 1', '6,5 - 8', 'numero'), ('Agua Suavizada', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Agua Suavizada', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Agua Suavizada', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Agua Suavizada', 'Solidos disueltos totales (TDS)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Almacenamiento de agua potable para proceso', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 1 agua Cervezera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 2 agua Cervezera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 1 de agua de Servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Ultrafiltración 2 de agua de Servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tanque de almacenamiento PTAP cervecera', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Tanque de almacenamiento PTAP cervecera', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 3', 'numero'), ('Tanque de almacenamiento PATP Servicios', 'Cloro residual', 'Diario', 'Todos', 'Todos', '0,5 - 2', 'numero'), ('Tanque de almacenamiento PATP Servicios', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 3', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C1', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C2', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua cervecera', 'Cloro residual F C3', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C1', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C2', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Filtracion por carbon agua de servicios', 'Cloro residual F C3', 'Semanal', 'Martes', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Cloro residual (Lab)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Cloro residual (Linea)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua cervecera', 'Concentración dioxido de cloro (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua cervecera', 'Concentración dioxido de cloro (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua cervecera', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 2', 'numero'), ('Salida tren filtros agua de servicios', 'Cloro residual (Lab)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua de servicios', 'Cloro residual (Linea)', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Salida tren filtros agua de servicios', 'Concentración dioxido de cloro (Lab)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Salida tren filtros agua de servicios', 'Concentración dioxido de cloro (Linea)', 'Diario', 'Todos', 'Turno 1', '0 - 0,4', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'pH (Muestra 1)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'pH (Muestra 2)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Intensidad lampara UV 1', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Intensidad lampara UV 2', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 70', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Solidos disueltos totales', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua cervecera', 'Dióxido de Cloro', 'Diario', 'Todos', 'Todos', '0 - 0,4', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'pH (Muestra 1)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'pH (Muestra 2)', 'Diario', 'Todos', 'Todos', '6,5 - 7,2', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Cloro residual', 'Diario', 'Todos', 'Turno 1', '< 0,10', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Turbiedad', 'Diario', 'Todos', 'Turno 1', '0 - 0,5', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Evaluación Sensorial', 'Diario', 'Todos', 'Todos', 'Pasa / No pasa', 'sensorial'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Intensidad lampara UV 1', 'Diario', 'Todos', 'Todos', '0 - 25', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Color', 'Semanal', 'Miércoles', 'Turno 1', '0 - 15', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Hierro total (Fe)', 'Semanal', 'Miércoles', 'Turno 1', '0 - 0,1', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Dureza Total', 'Semanal', 'Miércoles', 'Turno 1', '< 90 ppm', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Cloruros', 'Semanal', 'Miércoles', 'Turno 1', '0 - 70', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Solidos disueltos totales', 'Semanal', 'Miércoles', 'Turno 1', '0 - 500', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Conductividad', 'Semanal', 'Miércoles', 'Turno 1', '0 - 746', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Sulfatos', 'Semanal', 'Martes', 'Turno 1', '0 - 50', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Manganeso', 'Semanal', 'Martes', 'Turno 1', '0 - 0,05', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Alcalinidad Total', 'Semanal', 'Martes', 'Turno 1', '0 - 90', 'numero'), ('Tratamiento con luz Ultravioleta agua de servicios', 'Aluminio (Al)', 'Semanal', 'Martes', 'Turno 1', '0 - 0,1', 'numero'), ('Cuarto generación dióxido de cloro', 'Nivel de los tanques buffer', 'Diario', 'Todos', 'Todos', 'Cumple / No cumple', 'estado'), ('Salida tren filtros agua de servicios', 'COT', 'Diario', 'Todos', 'Turno 2', '0 - 2', 'numero')]
 
 
 class ItemRegistro(BaseModel):
@@ -525,86 +526,32 @@ def ver_contadores(request: Request):
 
 @app.get("/api/contadores/registros")
 def consultar_registros_contadores(db: Session = Depends(get_db)):
-    nombre_archivo = "Bitacora_PTAP.xlsx"
-    nombre_hoja = "Contadores_24h"
-    resultado = []
-    
-    if os.path.exists(nombre_archivo):
-        try:
-            wb = openpyxl.load_workbook(nombre_archivo, read_only=True, data_only=True)
-            if nombre_hoja in wb.sheetnames:
-                ws = wb[nombre_hoja]
-                filas = list(ws.iter_rows(values_only=True))
-                if len(filas) > 1:
-                    encabezados = filas[0]
-                    for row in filas[1:]:
-                        if not row or not any(row): continue
-                        fecha = row[0]
-                        operador = row[1]
-                        lecturas_dict = {}
-                        for i in range(2, len(encabezados)):
-                            if i < len(row):
-                                lecturas_dict[str(encabezados[i])] = row[i]
-                        resultado.append({
-                            "fecha": str(fecha),
-                            "operador": str(operador),
-                            "lecturas": lecturas_dict
-                        })
-            wb.close()
-        except Exception as e:
-            print(f"Error leyendo contadores de Excel: {e}")
-            
-    return {"data": resultado}
+    rows = db.query(models.RegistroContador24h).order_by(models.RegistroContador24h.fecha.desc(), models.RegistroContador24h.id.desc()).all()
+    return {"data": [{"id": r.id, "fecha": r.fecha, "operador": r.operador,
+                      "lecturas": json.loads(r.lecturas_json)} for r in rows]}
 
 @app.post("/api/contadores/guardar")
-def guardar_contadores_24h(payload: PayloadContadores24h):
-    nombre_archivo = "Bitacora_PTAP.xlsx"
-    nombre_hoja = "Contadores_24h"
-    
-    try:
-        ultima_fila = {}
-        if os.path.exists(nombre_archivo):
-            wb_old = openpyxl.load_workbook(nombre_archivo, read_only=True, data_only=True)
-            if nombre_hoja in wb_old.sheetnames:
-                ws_old = wb_old[nombre_hoja]
-                rows = list(ws_old.iter_rows(values_only=True))
-                if len(rows) > 1:
-                    headers = rows[0]
-                    last_vals = rows[-1]
-                    for i, h in enumerate(headers):
-                        if i < len(last_vals):
-                            ultima_fila[str(h)] = last_vals[i]
-            wb_old.close()
+def guardar_contadores_24h(payload: PayloadContadores24h, db: Session = Depends(get_db)):
+    if db.query(models.RegistroContador24h).filter_by(fecha=payload.fecha).first():
+        raise HTTPException(409, "Ya existe un registro para esta fecha. Modifíquelo en lugar de duplicarlo.")
+    row = models.RegistroContador24h(fecha=payload.fecha, operador=payload.operador,
+                                    lecturas_json=json.dumps(payload.lecturas, ensure_ascii=False))
+    db.add(row); db.commit()
+    return {"status": "ok", "id": row.id}
 
-        encabezados = ["Fecha", "Operador"]
-        fila_datos = [payload.fecha, payload.operador]
+@app.put("/api/contadores/actualizar/{registro_id}")
+def actualizar_contadores(registro_id: int, payload: PayloadContadores24h, db: Session = Depends(get_db)):
+    row = db.get(models.RegistroContador24h, registro_id)
+    if not row: raise HTTPException(404, "Registro no encontrado")
+    row.fecha, row.operador = payload.fecha, payload.operador
+    row.lecturas_json = json.dumps(payload.lecturas, ensure_ascii=False)
+    db.commit(); return {"status": "ok"}
 
-        for medidor, val in payload.lecturas.items():
-            is_nivel = "Nivel" in medidor
-            if is_nivel:
-                encabezados.append(medidor)
-                fila_datos.append(val)
-            else:
-                encabezados.append(f"{medidor} - Lectura")
-                encabezados.append(f"{medidor} - Total")
-                fila_datos.append(val)
-                
-                val_anterior = float(ultima_fila.get(f"{medidor} - Lectura", val))
-                consumo = round(max(0.0, val - val_anterior), 2)
-                fila_datos.append(consumo)
-
-        wb = openpyxl.load_workbook(nombre_archivo) if os.path.exists(nombre_archivo) else openpyxl.Workbook()
-        ws = wb[nombre_hoja] if nombre_hoja in wb.sheetnames else wb.create_sheet(title=nombre_hoja)
-        
-        if ws.max_row == 1 and ws.cell(1, 1).value is None:
-            ws.append(encabezados)
-            
-        ws.append(fila_datos)
-        wb.save(nombre_archivo)
-        wb.close()
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.delete("/api/contadores/eliminar/{registro_id}")
+def eliminar_contadores(registro_id: int, db: Session = Depends(get_db)):
+    row = db.get(models.RegistroContador24h, registro_id)
+    if not row: raise HTTPException(404, "Registro no encontrado")
+    db.delete(row); db.commit(); return {"status": "ok"}
 
 
 # --- MÓDULO: BITÁCORA ---
@@ -695,71 +642,32 @@ def ver_limpieza_uf(request: Request):
     })
 
 @app.get("/api/limpieza-uf/registros")
-def consultar_registros_limpieza_uf():
-    nombre_archivo = "Bitacora_PTAP.xlsx"
-    nombre_hoja = "Limpieza_UF"
-    resultado = []
-    
-    if os.path.exists(nombre_archivo):
-        try:
-            wb = openpyxl.load_workbook(nombre_archivo, read_only=True, data_only=True)
-            if nombre_hoja in wb.sheetnames:
-                ws = wb[nombre_hoja]
-                filas = list(ws.iter_rows(values_only=True))
-                for row in filas[1:]:
-                    if not row or not any(row): continue
-                    resultado.insert(0, {
-                        "fecha": str(row[0]),
-                        "equipo": str(row[1]),
-                        "operador": str(row[2]),
-                        "tipo_limpieza": str(row[3]),
-                        "hora_inicio": str(row[4]),
-                        "hora_final": str(row[5]),
-                        "concentracion_1": str(row[6]),
-                        "concentracion_2": str(row[7]),
-                        "agua_inicial": row[8],
-                        "agua_final": row[9],
-                        "consumo_agua": row[10],
-                        "turbiedad": str(row[11]),
-                        "ph_final": str(row[12]),
-                        "observaciones": str(row[13]) if len(row) > 13 else ""
-                    })
-            wb.close()
-        except Exception as e:
-            print(f"Error leyendo limpieza UF de Excel: {e}")
-            
-    return {"data": resultado}
+def consultar_registros_limpieza_uf(db: Session = Depends(get_db)):
+    rows = db.query(models.RegistroLimpiezaUF).order_by(models.RegistroLimpiezaUF.fecha.desc(), models.RegistroLimpiezaUF.id.desc()).all()
+    return {"data": rows}
 
 @app.post("/api/limpieza-uf/guardar")
-def guardar_limpieza_uf(payload: PayloadLimpiezaUF):
-    nombre_archivo = "Bitacora_PTAP.xlsx"
-    nombre_hoja = "Limpieza_UF"
-    consumo = max(0.0, round(payload.agua_final - payload.agua_inicial, 2))
-    
-    encabezados = [
-        "Fecha", "Equipo", "Operador", "Tipo de limpieza", "Hora Inicio", 
-        "Hora final", "Concentración 1", "Concentración 2", "Agua Inicial", 
-        "Agua Final", "Consumo", "Turbiedad", "pH Final", "Observaciones"
-    ]
-    
-    try:
-        wb = openpyxl.load_workbook(nombre_archivo) if os.path.exists(nombre_archivo) else openpyxl.Workbook()
-        ws = wb[nombre_hoja] if nombre_hoja in wb.sheetnames else wb.create_sheet(title=nombre_hoja)
-        
-        if ws.max_row == 1 and ws.cell(1, 1).value is None:
-            ws.append(encabezados)
-            
-        ws.append([
-            payload.fecha, payload.equipo, payload.operador, payload.tipo_limpieza,
-            payload.hora_inicio, payload.hora_final, payload.concentracion_1,
-            payload.concentracion_2, payload.agua_inicial, payload.agua_final,
-            consumo, payload.turbiedad, payload.ph_final, payload.observaciones
-        ])
-        wb.save(nombre_archivo)
-        wb.close()
-        return {"status": "ok"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def guardar_limpieza_uf(payload: PayloadLimpiezaUF, db: Session = Depends(get_db)):
+    consumo = round(payload.agua_final - payload.agua_inicial, 2)
+    if consumo < 0: raise HTTPException(422, "El contador final no puede ser inferior al inicial")
+    row = models.RegistroLimpiezaUF(**payload.dict(), consumo_agua=consumo)
+    db.add(row); db.commit(); return {"status": "ok", "id": row.id}
+
+@app.put("/api/limpieza-uf/actualizar/{registro_id}")
+def actualizar_uf(registro_id: int, payload: PayloadLimpiezaUF, db: Session = Depends(get_db)):
+    row = db.get(models.RegistroLimpiezaUF, registro_id)
+    if not row: raise HTTPException(404, "Registro no encontrado")
+    for k,v in payload.dict().items(): setattr(row,k,v)
+    row.consumo_agua = round(payload.agua_final - payload.agua_inicial,2)
+    if row.consumo_agua < 0: raise HTTPException(422, "Contadores inconsistentes")
+    db.commit(); return {"status": "ok"}
+
+@app.delete("/api/limpieza-uf/eliminar/{registro_id}")
+def eliminar_uf(registro_id: int, db: Session = Depends(get_db)):
+    row = db.get(models.RegistroLimpiezaUF, registro_id)
+    if not row: raise HTTPException(404, "Registro no encontrado")
+    db.delete(row); db.commit(); return {"status": "ok"}
+
 
 # --- MÓDULO: PLANES DE ACCIÓN ---
 

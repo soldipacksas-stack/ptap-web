@@ -63,3 +63,39 @@ class RegistroPlanAccion(Base):
     descripcion_accion = Column(Text)
     operador = Column(String(120), index=True)
     creado_en = Column(DateTime, default=datetime.now)
+
+
+class RegistroContador24h(Base):
+    __tablename__ = "contadores_24h_registros"
+    id = Column(Integer, primary_key=True)
+    fecha = Column(String(10), index=True, nullable=False)
+    operador = Column(String(120), default="")
+    lecturas_json = Column(Text, nullable=False)
+    creado_en = Column(DateTime, default=datetime.now)
+
+class RegistroLimpiezaUF(Base):
+    __tablename__ = "limpieza_uf_registros"
+    id = Column(Integer, primary_key=True)
+    fecha = Column(String(10), index=True, nullable=False)
+    equipo = Column(String(50), index=True)
+    operador = Column(String(120))
+    tipo_limpieza = Column(String(100))
+    hora_inicio = Column(String(20))
+    hora_final = Column(String(20))
+    concentracion_1 = Column(String(50))
+    concentracion_2 = Column(String(50))
+    agua_inicial = Column(Float)
+    agua_final = Column(Float)
+    consumo_agua = Column(Float)
+    turbiedad = Column(String(50))
+    ph_final = Column(String(50))
+    observaciones = Column(Text)
+    creado_en = Column(DateTime, default=datetime.now)
+
+class RegistroImportacionOrigen(Base):
+    __tablename__ = "ptap_importaciones_origen"
+    id = Column(Integer, primary_key=True)
+    clave = Column(String(180), unique=True, nullable=False, index=True)
+    modulo = Column(String(60), nullable=False)
+    registro_id = Column(Integer, nullable=False)
+    creado_en = Column(DateTime, default=datetime.now)
