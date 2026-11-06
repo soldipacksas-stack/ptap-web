@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planes de Acción - PTAP ZFCCC</title>
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
+<style>
+/* Paleta institucional PTAP — visualizaciones y navegación */
+:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}
+</style><style id="ptap-unified-style">:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}aside.ptap-unified-side{background:#0B4934!important;color:white!important;overflow-y:auto!important;padding:18px 12px!important;min-width:220px}aside.ptap-unified-side.ptap-added{position:fixed;inset:0 auto 0 0;width:230px;z-index:100}.ptap-brand{color:white!important;font-size:20px!important;font-weight:750!important;margin:5px 9px 20px!important;padding-bottom:15px!important;border-bottom:1px solid #39705B!important;text-align:left!important}.ptap-nav{display:flex!important;flex-direction:column!important;gap:2px!important}.ptap-nav a{display:block!important;color:#e2f4e8!important;font:500 13px/1.3 Segoe UI,Arial,sans-serif!important;text-decoration:none!important;padding:10px 11px!important;border-radius:7px!important;background:transparent!important;margin:0!important;white-space:normal!important}.ptap-nav a:hover{background:#176047!important}.ptap-nav a.ptap-selected{background:#DCE9E3!important;color:#0B4934!important;font-weight:700!important}.ptap-offset-main{margin-left:230px!important;max-width:none!important;padding:24px!important}@media(max-width:760px){aside.ptap-unified-side.ptap-added{position:relative!important;width:100%!important;max-height:210px!important}.ptap-offset-main{margin-left:0!important;padding:12px!important}.ptap-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}</style></head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div class="flex h-screen overflow-hidden">
         
@@ -20,7 +23,7 @@
                 <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
                 <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
                 <a href="/planes-accion" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Planes de Acción</a>
-            </nav>
+            <a href="/reportes/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▤ Impresión de formatos</a></nav>
         </aside>
 
         <!-- Main Content -->
@@ -84,5 +87,12 @@
 
         window.onload = cargarPlanesAccion;
     </script>
-</body>
+<script>(function(){
+ const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
+ const path=location.pathname;
+ nav.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('ptap-selected')});
+ const side=document.querySelector('aside');
+ if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
+ else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
+})();</script></body>
 </html>

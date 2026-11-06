@@ -6,7 +6,10 @@
     <title>Limpieza de Filtros - PTAP ZFCCC</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+<style>
+/* Paleta institucional PTAP — visualizaciones y navegación */
+:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}
+</style><style id="ptap-unified-style">:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}aside.ptap-unified-side{background:#0B4934!important;color:white!important;overflow-y:auto!important;padding:18px 12px!important;min-width:220px}aside.ptap-unified-side.ptap-added{position:fixed;inset:0 auto 0 0;width:230px;z-index:100}.ptap-brand{color:white!important;font-size:20px!important;font-weight:750!important;margin:5px 9px 20px!important;padding-bottom:15px!important;border-bottom:1px solid #39705B!important;text-align:left!important}.ptap-nav{display:flex!important;flex-direction:column!important;gap:2px!important}.ptap-nav a{display:block!important;color:#e2f4e8!important;font:500 13px/1.3 Segoe UI,Arial,sans-serif!important;text-decoration:none!important;padding:10px 11px!important;border-radius:7px!important;background:transparent!important;margin:0!important;white-space:normal!important}.ptap-nav a:hover{background:#176047!important}.ptap-nav a.ptap-selected{background:#DCE9E3!important;color:#0B4934!important;font-weight:700!important}.ptap-offset-main{margin-left:230px!important;max-width:none!important;padding:24px!important}@media(max-width:760px){aside.ptap-unified-side.ptap-added{position:relative!important;width:100%!important;max-height:210px!important}.ptap-offset-main{margin-left:0!important;padding:12px!important}.ptap-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}</style></head>
 <body class="bg-gray-100 font-sans text-gray-800">
     <div class="flex h-screen overflow-hidden">
         
@@ -20,7 +23,7 @@
                 <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
                 <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
                 <a href="/filtros" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Limpieza Filtros</a>
-            </nav>
+            <a href="/reportes/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▤ Impresión de formatos</a></nav>
         </aside>
 
         <!-- Main Content Area -->
@@ -90,6 +93,19 @@
                 </div>
             </div>
 
+            <!-- Historial real: conteo de esterilizaciones desde PostgreSQL -->
+            <section class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6" aria-labelledby="tituloHistorial">
+              <h3 id="tituloHistorial" class="font-bold text-[#0B4934] mb-2">📊 Historial de esterilizaciones por filtro</h3>
+              <p class="text-xs text-gray-500 mb-4">Cantidad de esterilizaciones registradas. Solo se cuentan eventos de esterilización; no las limpiezas.</p>
+              <div class="flex flex-wrap gap-3 mb-4 items-end">
+                <label class="text-sm">Desde <input id="histDesde" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Hasta <input id="histHasta" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Filtro <select id="histFiltro" class="block border rounded p-2 mt-1"><option value="">Todos</option><option>F121</option><option>F122</option><option>F123</option><option>F221</option><option>F222</option><option>F223</option></select></label>
+                <button type="button" id="histActualizar" class="bg-[#25846A] text-white rounded px-4 py-2">Actualizar</button>
+              </div>
+              <p id="histEstado" class="text-sm text-gray-500" role="status"></p>
+              <div class="relative h-72 w-full"><canvas id="histEsterilizaciones" aria-label="Cantidad de esterilizaciones por filtro"></canvas></div>
+            </section>
             <!-- Sección de Gráfica de Líneas Inferior -->
             <div class="bg-white p-5 rounded-lg shadow border border-gray-200">
                 <h3 class="font-bold text-[#0b4f2f] mb-2">📊 Monitoreo Gráfico de Ciclos vs Límite de 48 Horas</h3>
@@ -219,7 +235,7 @@
         document.getElementById('filtro_fecha').value = "";
 
         let cronometrosData = [];
-        let chartInstancia = null;
+        let chartInstancia = null; let chartHistorial = null;
 
         // Función auxiliar para calcular el timestamp real de finalización considerando medianoche
         function obtenerTimestampFin(reg) {
@@ -395,6 +411,7 @@
             cronometrosData = data.data;
             renderizarCronometrosYTanques();
             actualizarGrafica();
+            actualizarHistorialEsterilizaciones();
         }
 
         async function eliminarRegistro(id) {
@@ -505,6 +522,34 @@
             });
         }, 1000);
 
+
+        function fechaLocalISO(d) { return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'); }
+        function iniciarHistorial() {
+            const hoy = new Date(), inicio = new Date(hoy); inicio.setDate(inicio.getDate()-29);
+            document.getElementById('histDesde').value = fechaLocalISO(inicio);
+            document.getElementById('histHasta').value = fechaLocalISO(hoy);
+            ['histDesde','histHasta','histFiltro'].forEach(id=>document.getElementById(id).addEventListener('change',actualizarHistorialEsterilizaciones));
+            document.getElementById('histActualizar').addEventListener('click',actualizarHistorialEsterilizaciones);
+        }
+        function actualizarHistorialEsterilizaciones() {
+            const desde=document.getElementById('histDesde').value, hasta=document.getElementById('histHasta').value;
+            const seleccionado=document.getElementById('histFiltro').value;
+            const estado=document.getElementById('histEstado');
+            if(desde&&hasta&&desde>hasta){estado.textContent='La fecha inicial no puede ser posterior a la final.';return;}
+            const filtros=seleccionado?[seleccionado]:['F121','F122','F123','F221','F222','F223'];
+            const cantidades=filtros.map(equipo=>cronometrosData.filter(r=>{
+                const tipo=(r.tipo_limpieza||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+                return r.equipo===equipo && tipo.includes('esterilizacion') && (!desde||r.fecha>=desde) && (!hasta||r.fecha<=hasta);
+            }).length);
+            estado.textContent=cantidades.some(n=>n>0)?'Total de esterilizaciones: '+cantidades.reduce((a,b)=>a+b,0):'Sin esterilizaciones registradas en el período seleccionado.';
+            if(chartHistorial)chartHistorial.destroy();
+            chartHistorial=new Chart(document.getElementById('histEsterilizaciones'),{
+                type:'bar',data:{labels:filtros,datasets:[{label:'Esterilizaciones realizadas',data:cantidades,backgroundColor:'#25846A',hoverBackgroundColor:'#0B4934',borderRadius:5,maxBarThickness:70}]},
+                options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' esterilizaciones'}}},scales:{y:{beginAtZero:true,ticks:{precision:0,color:'#9AAAB0'},grid:{color:'#DCE9E3'}},x:{ticks:{color:'#0B4934'},grid:{display:false}}}}
+            });
+        }
+        document.addEventListener('DOMContentLoaded',iniciarHistorial);
+
         function actualizarGrafica() {
             const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
             const ahora = new Date().getTime();
@@ -532,8 +577,8 @@
                         {
                             label: 'Horas desde última esterilización',
                             data: horasTranscurridas,
-                            borderColor: '#17803d',
-                            backgroundColor: 'rgba(23, 128, 61, 0.1)',
+                            borderColor: '#25846A',
+                            backgroundColor: 'rgba(37, 132, 106, 0.12)',
                             borderWidth: 3,
                             fill: true,
                             tension: 0.2
@@ -541,7 +586,7 @@
                         {
                             label: 'Límite Máximo (48 Horas)',
                             data: [48, 48, 48, 48, 48, 48],
-                            borderColor: '#dc2626',
+                            borderColor: '#C34E4E',
                             borderWidth: 2,
                             borderDash: [5, 5],
                             pointRadius: 0,
@@ -608,5 +653,12 @@
             cargarTablaFiltros();
         };
     </script>
-</body>
+<script>(function(){
+ const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
+ const path=location.pathname;
+ nav.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('ptap-selected')});
+ const side=document.querySelector('aside');
+ if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
+ else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
+})();</script></body>
 </html>
