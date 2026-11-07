@@ -1086,3 +1086,10 @@ _pc_rutas = {'/api/plan-calidad/maestra', '/api/plan-calidad/registros',
 app.router.routes[:] = [r for r in app.router.routes if getattr(r, 'path', None) not in _pc_rutas]
 pc_v2.iniciar(MAESTRA_PLAN_CALIDAD)
 app.include_router(pc_v2.router)
+
+
+@app.get('/static/plan_calidad_compat.js', include_in_schema=False)
+def pc_compat_script():
+    from fastapi.responses import FileResponse
+    from pathlib import Path
+    return FileResponse(Path(__file__).resolve().parent / 'static' / 'plan_calidad_compat.js', media_type='application/javascript')
