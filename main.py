@@ -1076,3 +1076,13 @@ def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depe
 @app.get("/reportes/plan-calidad", response_class=HTMLResponse)
 def pantalla_reporte_diario(request: Request):
     return templates.TemplateResponse(request,'impresion_formatos.html',{'request':request})
+
+# Plan de Calidad V2: sustituye únicamente las rutas API antiguas de este módulo.
+# Conserva las rutas de los demás módulos, la impresión y la importación histórica.
+import plan_calidad_v2 as pc_v2
+_pc_rutas = {'/api/plan-calidad/maestra', '/api/plan-calidad/registros',
+             '/api/plan-calidad/guardar', '/api/plan-calidad/editar',
+             '/api/plan-calidad/eliminar'}
+app.router.routes[:] = [r for r in app.router.routes if getattr(r, 'path', None) not in _pc_rutas]
+pc_v2.iniciar(MAESTRA_PLAN_CALIDAD)
+app.include_router(pc_v2.router)
