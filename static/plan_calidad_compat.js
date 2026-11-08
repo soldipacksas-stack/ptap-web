@@ -9,27 +9,27 @@ async function json(res){const data=await res.json().catch(()=>({}));if(!res.ok)
 function fieldRows(){return [...document.querySelectorAll('#contenedor-parametros .input-medida')];}
 function stateOf(inp){return inp.closest('.pc-state-wrap')?.querySelector('.pc-estado')?.value||'Resultado';}
 function setState(inp,estado){const wrap=inp.closest('.pc-state-wrap');if(!wrap)return;wrap.querySelector('.pc-estado').value=estado;refreshState(wrap);}
-function refreshState(wrap){const estado=wrap.querySelector('.pc-estado').value;const inp=wrap.querySelector('.input-medida');const just=wrap.querySelector('.pc-justificacion');inp.disabled=estado!=='Resultado';if(estado!=='Resultado')inp.value='';just.classList.toggle('hidden',estado==='Resultado');}
+function refreshState(wrap){const estado=wrap.querySelector('.pc-estado').value;const inp=wrap.querySelector('.input-medida');const just=wrap.querySelector('.pc-justificacion');if(estado==='Resultado'){if(['NA','NC','Pendiente'].includes(inp.value))inp.value='';inp.readOnly=false;}else{inp.value=estado;inp.readOnly=true;}inp.disabled=false;inp.placeholder='';just.classList.add('hidden');}
 function decorate(){
  for(const inp of fieldRows()){
    if(inp.closest('.pc-state-wrap'))continue;
    const wrap=document.createElement('span');wrap.className='pc-state-wrap flex flex-col gap-1 flex-1 min-w-0';
    inp.parentNode.insertBefore(wrap,inp);wrap.appendChild(inp);
    const sel=document.createElement('select');sel.className='pc-estado border rounded p-1 text-xs bg-gray-50';
-   sel.innerHTML='<option value="Resultado">Resultado</option><option value="NA">No aplica (NA)</option><option value="Pendiente">Pendiente</option>';
-   const just=document.createElement('input');just.type='text';just.placeholder='Justificación obligatoria';just.className='pc-justificacion hidden border rounded p-1 text-xs w-full';
-   wrap.append(sel,just);sel.addEventListener('change',()=>refreshState(wrap));
+   sel.innerHTML='<option value="Resultado" selected hidden></option><option value="NA">NA</option><option value="NC">NC</option><option value="Pendiente">Pendiente</option>';
+   const just=document.createElement('input');just.type='text';just.placeholder='';just.className='pc-justificacion hidden border rounded p-1 text-xs w-full';
+   wrap.append(sel,just);inp.placeholder='';sel.addEventListener('change',()=>refreshState(wrap));
    // Reutilizar la evaluación original de rango, pero pedir el plan al guardar.
-   inp.addEventListener('change',()=>{if(inp.value)try{validarCasillaMedicion(inp)}catch(_){}});
+   inp.addEventListener('change',()=>{if(stateOf(inp)==='Resultado'&&inp.value)try{validarCasillaMedicion(inp)}catch(_){}});
  }
 }
 const oldRender=window.renderizarCamposDinamicos;
-window.renderizarCamposDinamicos=async function(){modoEdicion=false;await oldRender();decorate();};
+window.renderizarCamposDinamicos=async function(){await oldRender();decorate();};
 const oldAbrir=window.abrirModalFormulario;
 window.abrirModalFormulario=function(){modoEdicion=false;oldAbrir();$('modalForm').querySelector('h3').textContent='📝 Registrar Mediciones Plan de Calidad';};
 function itemData(inp){
  const wrap=inp.closest('.pc-state-wrap'),estado=stateOf(inp);
- return {zona:inp.dataset.zona,parametro:inp.dataset.param,valor:estado==='Resultado'?inp.value.trim():'',estado,
+ return {zona:inp.dataset.zona,parametro:inp.dataset.param,valor:estado==='Resultado'?inp.value.trim():estado,estado,
  justificacion:estado==='Resultado'?'':wrap.querySelector('.pc-justificacion').value.trim(),plan_accion:inp.dataset.pcPlan||''};
 }
 async function ensurePlans(items){
@@ -50,12 +50,26 @@ window.enviarFormulario=async function(){
  const items=fieldRows().map(itemData);
  if(!items.length){alert('No hay parámetros programados para guardar.');return;}
  for(const item of items){if(item.estado==='Resultado'&&!item.valor){alert('Falta resultado: '+item.zona+' / '+item.parametro);return;}
- if(item.estado!=='Resultado'&&!item.justificacion){alert('Falta justificación: '+item.zona+' / '+item.parametro);return;}}
- if(items.some(i=>i.estado==='Pendiente')&&!confirm('Hay análisis pendientes. ¿Desea guardar el turno con las justificaciones registradas?'))return;
+ }
+ if(items.some(i=>i.estado==='Pendiente')&&!confirm('Hay análisis pendientes. ¿Desea guardar el turno?'))return;
  try{
- await ensurePlans(items);
+ // La validación definitiva de límites y planes de acción se realiza en el servidor.
  const payload={fecha:$('form_fecha').value,turno:$('form_turno').value,operador:$('form_operador').value,registros:items};
- const res=await fetch(modoEdicion?'/api/plan-calidad/editar':'/api/plan-calidad/guardar',{method:modoEdicion?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ let res=await fetch(modoEdicion?'/api/plan-calidad/editar':'/api/plan-calidad/guardar',{method:modoEdicion?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ if(!res.ok){
+   const error=await res.clone().json().catch(()=>({}));
+   const detail=typeof error.detail==='string'?error.detail:'';
+   if(detail.startsWith('Plan de acción obligatorio: ')){
+     const name=detail.slice('Plan de acción obligatorio: '.length);
+     const item=items.find(i=>name===i.zona+' / '+i.parametro);
+     if(item){const plan=prompt('Resultado fuera de especificación: '+name+'\nDescriba el plan de acción inicial obligatorio:',item.plan_accion||'');
+       if(plan===null)return;
+       if(!plan.trim()){alert('El plan de acción no puede quedar vacío.');return;}
+       item.plan_accion=plan.trim();
+       res=await fetch(modoEdicion?'/api/plan-calidad/editar':'/api/plan-calidad/guardar',{method:modoEdicion?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+     }
+   }
+ }
  await json(res);alert(modoEdicion?'Registros modificados correctamente.':'Mediciones guardadas correctamente.');modoEdicion=false;cerrarModalFormulario();cargarTablaRegistros();
  }catch(e){alert('No se guardaron los cambios: '+e.message);}
 };
@@ -71,7 +85,7 @@ async function cargarEdicion(){
  const map=new Map(rows.map(r=>[key(r.zona,r.parametro),r]));
  for(const inp of fieldRows()){
  const r=map.get(key(inp.dataset.zona,inp.dataset.param));if(!r)continue;
- setState(inp,r.estado||((r.valor==='N/A'||r.valor==='NA')?'NA':'Resultado'));
+ setState(inp,['NA','NC','Pendiente'].includes(r.estado)?r.estado:(['NA','NC','Pendiente'].includes(r.valor)?r.valor:'Resultado'));
  if(stateOf(inp)==='Resultado')inp.value=r.valor||'';
  else inp.closest('.pc-state-wrap').querySelector('.pc-justificacion').value=r.justificacion||'';
  }
