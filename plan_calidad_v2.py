@@ -103,6 +103,16 @@ def parametros(db, fecha):
     v = obtener_version(db,fecha)
     return v, db.query(Parametro).filter_by(version_id=v.id).order_by(Parametro.id).all()
 
+def limite_efectivo(p):
+    # Regla vigente para intensidades UV, sin reescribir versiones históricas.
+    if 'intensidad' in p.parametro.casefold() and 'uv' in p.parametro.casefold():
+        return '>= 25'
+    return p.limite
+
+def ordenar_parametros(ps):
+    # Reubicar COT junto a los demás parámetros de su punto de muestreo.
+    return sorted(ps, key=lambda p: (p.id if not (p.zona == 'Salida tren filtros agua de servicios' and p.parametro == 'COT') else max((q.id for q in ps if q.zona == p.zona and q.parametro != 'COT'), default=p.id) + 0.5))
+
 def normal_num(valor):
     try: return float(valor.replace(',','.').strip())
     except ValueError: raise HTTPException(422,f'Valor numérico inválido: {valor}')
@@ -128,33 +138,32 @@ def evaluar(valor, limite, tipo):
     raise HTTPException(422,f'Límite sin regla interpretable: {lim}. Revisar matriz maestra antes de guardar.')
 
 def validar_item(item,p):
-    if item.estado not in ('Resultado','NA','Pendiente'): raise HTTPException(422,'Estado inválido')
+    if item.estado not in ('Resultado','NA','NC','Pendiente'): raise HTTPException(422,'Estado inválido')
     if item.estado == 'Resultado':
         if not item.valor.strip(): raise HTTPException(422,f'Falta valor: {p.zona} / {p.parametro}')
-        resultado = evaluar(item.valor,p.limite,p.tipo)
+        resultado = evaluar(item.valor,limite_efectivo(p),p.tipo)
         if resultado == 'FUERA DE RANGO' and not item.plan_accion.strip():
             raise HTTPException(422,f'Plan de acción obligatorio: {p.zona} / {p.parametro}')
         return resultado
-    if item.valor.strip(): raise HTTPException(422,f'No ingrese valor si selecciona {item.estado}')
-    if not item.justificacion.strip(): raise HTTPException(422,f'Justificación obligatoria: {p.zona} / {p.parametro}')
+    if item.valor.strip() not in ('',item.estado): raise HTTPException(422,f'Valor incompatible con {item.estado}')
     return item.estado
 
 def serial(r, estado=None):
     return {'id':r.id,'fecha':r.fecha,'turno':r.turno,'operador':r.operador,'zona':r.zona,
             'parametro':r.parametro,'valor':r.valor,'resultado':r.resultado,'limite':r.limite,
-            'estado':estado.estado if estado else ('NA' if r.valor in ('N/A','NA') else 'Resultado'),
+            'estado':estado.estado if estado else (r.valor if r.valor in ('N/A','NA','NC','Pendiente') else 'Resultado'),
             'justificacion':estado.justificacion if estado else ''}
 
 @router.get('/api/plan-calidad/maestra')
 def maestra(fecha: str, turno: str = 'Todos', db: Session=Depends(get_db)):
     date.fromisoformat(fecha)
     v, ps = parametros(db,fecha)
-    return {'version':v.id,'maestra':[[p.zona,p.parametro,p.frecuencia,p.dia,p.turno,p.limite,p.tipo] for p in ps if turno=='Todos' or programado(p,fecha,turno)]}
+    return {'version':v.id,'maestra':[[p.zona,p.parametro,p.frecuencia,p.dia,p.turno,limite_efectivo(p),p.tipo] for p in ordenar_parametros(ps) if turno=='Todos' or programado(p,fecha,turno)]}
 
 @router.get('/api/plan-calidad/maestra-completa')
 def maestra_completa(fecha: str, db:Session=Depends(get_db)):
     v,ps=parametros(db,fecha)
-    return {'version':v.id,'maestra':[[p.zona,p.parametro,p.frecuencia,p.dia,p.turno,p.limite,p.tipo] for p in ps]}
+    return {'version':v.id,'maestra':[[p.zona,p.parametro,p.frecuencia,p.dia,p.turno,limite_efectivo(p),p.tipo] for p in ordenar_parametros(ps)]}
 
 @router.get('/api/plan-calidad/registros')
 def registros(f_desde:str=Query(...),f_hasta:str=Query(...),turno:str='Todos',db:Session=Depends(get_db)):
@@ -181,7 +190,7 @@ def validar_lote(payload,db,editar=False):
 def guardar_plan(db,r,item,p,v,resultado,operador,fecha,turno):
     if resultado!='FUERA DE RANGO':return
     plan=models.RegistroPlanAccion(fecha=fecha,turno=turno,modulo='Plan de Calidad',zona=p.zona,parametro=p.parametro,
-        valor_registrado=item.valor,limite_esperado=p.limite,descripcion_accion=item.plan_accion.strip(),operador=operador)
+        valor_registrado=item.valor,limite_esperado=limite_efectivo(p),descripcion_accion=item.plan_accion.strip(),operador=operador)
     db.add(plan);db.flush()
     db.add(Vinculo(registro_id=r.id,plan_id=plan.id))
 
@@ -194,7 +203,7 @@ def guardar(payload:Lote,db:Session=Depends(get_db)):
         for key,p in oblig.items():
             item=recibidos[key]; resultado=evaluados[key]
             r=models.RegistroPlanCalidad(fecha=payload.fecha,turno=payload.turno,operador=payload.operador,zona=p.zona,parametro=p.parametro,
-               valor=item.valor if item.estado=='Resultado' else item.estado,resultado=resultado,limite=p.limite)
+               valor=item.valor if item.estado=='Resultado' else item.estado,resultado=resultado,limite=limite_efectivo(p))
             db.add(r);db.flush()
             db.add(Estado(registro_id=r.id,estado=item.estado,justificacion=item.justificacion.strip() if item.estado!='Resultado' else '',version_id=v.id))
             guardar_plan(db,r,item,p,v,resultado,payload.operador,payload.fecha,payload.turno)
@@ -217,7 +226,7 @@ def editar(payload:Lote,db:Session=Depends(get_db)):
             anterior=serial(r,s)
             previo_fuera=r.resultado=='FUERA DE RANGO'
             r.valor=item.valor if item.estado=='Resultado' else item.estado
-            r.resultado=resultado;r.limite=p.limite
+            r.resultado=resultado;r.limite=limite_efectivo(p)
             if not s:s=Estado(registro_id=r.id,version_id=v.id);db.add(s)
             s.estado=item.estado;s.justificacion=item.justificacion.strip() if item.estado!='Resultado' else ''
             nuevo=serial(r,s)
@@ -272,8 +281,8 @@ def indicadores(f_desde:str,f_hasta:str,turno:str='Todos',db:Session=Depends(get
                 if len(matches)!=1:c['sin_estado']+=1;continue
                 r=matches[0];state=r['estado']
                 if state=='Resultado':c['realizados']+=1
-                elif state=='NA' and r['justificacion']:c['na']+=1
-                elif state=='Pendiente' and r['justificacion']:c['pendientes']+=1
+                elif state in ('NA','NC'):c['na']+=1
+                elif state=='Pendiente':c['pendientes']+=1
                 else:c['sin_estado']+=1
             for k in total:total[k]+=c[k]
             c.update({'fecha':dia.isoformat(),'turno':t,
