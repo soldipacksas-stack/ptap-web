@@ -444,7 +444,7 @@
                     const comboKey = `${zona}|${paramLimpio}`;
                     if (!combinacionesVistas.has(comboKey)) {
                         combinacionesVistas.add(comboKey);
-                        let esDobleMuestra = (frecuencia && frecuencia.toLowerCase().includes('2')) || /\(Muestra\s*[12]\)/i.test(param);
+                        let esDobleMuestra = (/(?:2|dos)\s*veces\s*(?:por\s*)?turno/i.test(frecuencia || '')) || /\(Muestra\s*[12]\)/i.test(param);
                         listaFilasUnicas.push({
                             zona: zona,
                             parametroLimpio: paramLimpio,
@@ -492,6 +492,12 @@
 
                 // Sólo las frecuencias expresamente por turno mantienen columnas independientes.
                 // Las demás se muestran como una única celda por día, sin modificar datos de PostgreSQL.
+                // Excepciones confirmadas: buffer se registra en los tres turnos;
+                // COT siempre ocupa una celda por día, sin alterar su frecuencia real.
+                const esBufferTresTurnos = item =>
+                    /cuarto\s+generaci[oó]n\s+di[oó]xido\s+de\s+cloro/i.test(item.zona) &&
+                    /nivel\s+de\s+los\s+tanques\s+buffer/i.test(item.parametroLimpio);
+                const esCOTDiarioVisual = item => /\bCOT\b/i.test(item.parametroLimpio);
                 const esFrecuenciaPorTurno = frecuencia => {
                     const f = String(frecuencia || '').toLowerCase().trim();
                     return /turno/.test(f) || /2 veces turno/.test(f);
@@ -518,7 +524,7 @@
                             <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                     `;
 
-                    if (!esFrecuenciaPorTurno(item.frecuencia) && !item.esDobleMuestra && !tieneMuestrasMultiples.has(`${item.zona}|${item.parametroLimpio}`)) {
+                    if (!esBufferTresTurnos(item) && (esCOTDiarioVisual(item) || (!esFrecuenciaPorTurno(item.frecuencia) && !item.esDobleMuestra && !tieneMuestrasMultiples.has(`${item.zona}|${item.parametroLimpio}`)))) {
                         // Agrupar todas las horas visibles de cada fecha (seis si se muestran tres turnos).
                         fechasUnicas.forEach(fecha => {
                             const columnasDia = mapaColumnas.filter(col => col.fecha === fecha);
