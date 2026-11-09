@@ -1093,3 +1093,70 @@ def pc_compat_script():
     from fastapi.responses import FileResponse
     from pathlib import Path
     return FileResponse(Path(__file__).resolve().parent / 'static' / 'plan_calidad_compat.js', media_type='application/javascript')
+
+
+# Dashboard: indicadores de ejecución contrastados con la matriz vigente.
+@app.get('/api/dashboard/cumplimiento')
+def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
+                           zona: str = 'Todas', db: Session = Depends(get_db)):
+    import plan_calidad_v2 as pc
+    try:
+        a, b = date.fromisoformat(desde), date.fromisoformat(hasta)
+    except ValueError:
+        raise HTTPException(422, 'Fechas inválidas')
+    if a > b or (b-a).days > 366:
+        raise HTTPException(422, 'Seleccione un rango de hasta 367 días')
+    if turno not in ('Todos', *pc.TURNOS):
+        raise HTTPException(422, 'Turno inválido')
+    registros = db.query(models.RegistroPlanCalidad).filter(
+        models.RegistroPlanCalidad.fecha >= desde,
+        models.RegistroPlanCalidad.fecha <= hasta).all()
+    if turno != 'Todos':
+        registros = [r for r in registros if r.turno == turno]
+    if zona != 'Todas':
+        registros = [r for r in registros if r.zona == zona]
+    por_clave = defaultdict(list)
+    for r in registros:
+        por_clave[(r.fecha,r.turno,r.zona,r.parametro)].append(r)
+    ids = [r.id for r in registros]
+    estados = {s.registro_id:s.estado for s in db.query(pc.Estado).filter(pc.Estado.registro_id.in_(ids)).all()} if ids else {}
+    tot = dict(programados=0,realizados=0,pendientes=0,na=0,sin_registrar=0,fuera_rango=0,conformes=0,duplicados=0)
+    dias=[]; d=a
+    while d<=b:
+        fecha=d.isoformat()
+        _, ps=pc.parametros(db,fecha)
+        c=dict.fromkeys(tot,0)
+        for t in (pc.TURNOS if turno=='Todos' else [turno]):
+            for p in ps:
+                if zona!='Todas' and p.zona!=zona:continue
+                if not pc.programado(p,fecha,t):continue
+                c['programados']+=1
+                encontrados=por_clave.get((fecha,t,p.zona,p.parametro),[])
+                if len(encontrados)>1:
+                    c['duplicados']+=1
+                    continue
+                if not encontrados:
+                    c['sin_registrar']+=1
+                    continue
+                r=encontrados[0]
+                estado=estados.get(r.id)
+                if not estado:
+                    v=(r.valor or '').strip().upper()
+                    estado='Pendiente' if v=='PENDIENTE' else ('NA' if v in ('NA','N/A','NC') else 'Resultado' if v else 'Sin registrar')
+                if estado=='Resultado':
+                    c['realizados']+=1
+                    res=(r.resultado or '').strip().casefold()
+                    if res in ('fuera de rango','no cumple'):c['fuera_rango']+=1
+                    elif res=='cumple':c['conformes']+=1
+                elif estado=='Pendiente':c['pendientes']+=1
+                elif estado in ('NA','NC'):c['na']+=1
+                else:c['sin_registrar']+=1
+        for k in tot:tot[k]+=c[k]
+        dias.append({'fecha':fecha,**c})
+        d+=timedelta(days=1)
+    tot['ejecucion']=round(100*tot['realizados']/tot['programados'],1) if tot['programados'] else None
+    evaluados=tot['conformes']+tot['fuera_rango']
+    tot['calidad']=round(100*tot['conformes']/evaluados,1) if evaluados else None
+    tot['documental']=round(100*(tot['realizados']+tot['pendientes']+tot['na'])/tot['programados'],1) if tot['programados'] else None
+    return {'desde':desde,'hasta':hasta,'total':tot,'dias':dias,
+            'zonas_disponibles':sorted({p.zona for p in db.query(pc.Parametro).all()})}
