@@ -344,6 +344,18 @@
                     });
                 });
 
+                // Matriz completa: conservar filas incluso cuando no están programadas en el turno consultado.
+                const completas = await Promise.all(fechasProgramacion.map(async fecha => {
+                    const res = await fetch(`/api/plan-calidad/maestra-completa?fecha=${fecha}`);
+                    if (!res.ok) throw new Error(`Error al consultar matriz completa ${fecha}`);
+                    const data = await res.json();
+                    return Array.isArray(data.maestra) ? data.maestra : [];
+                }));
+                completas.forEach(filas => filas.forEach(fila => {
+                    const clave = `${fila[0]}|${fila[1]}`;
+                    if (!filasVistas.has(clave)) { filasVistas.add(clave); listaMaestra.push(fila); }
+                }));
+
                 const fechasUnicas = fechasProgramacion;
 
                 const headEl = document.getElementById('header-matriz');
@@ -478,6 +490,24 @@
                     return a.parametroLimpio.localeCompare(b.parametroLimpio);
                 });
 
+                // Sólo las frecuencias expresamente por turno mantienen columnas independientes.
+                // Las demás se muestran como una única celda por día, sin modificar datos de PostgreSQL.
+                const esFrecuenciaPorTurno = frecuencia => {
+                    const f = String(frecuencia || '').toLowerCase().trim();
+                    return /turno/.test(f) || /2 veces turno/.test(f);
+                };
+                const aparienciaCelda = (valor, programada) => {
+                    const tieneValor = valor !== undefined && valor !== null && String(valor).trim() !== '';
+                    const texto = tieneValor ? valor : (programada ? '-' : 'NC');
+                    let clase = !tieneValor && !programada ? 'bg-gray-100 text-gray-500 font-semibold' : 'text-gray-400 italic';
+                    if (tieneValor) {
+                        clase = 'font-semibold text-gray-900';
+                        if (['FUERA DE RANGO', 'No pasa', 'No cumple'].includes(String(texto))) clase = 'bg-red-100 text-red-700 font-bold';
+                        else if (texto === 'Pendiente') clase = 'bg-yellow-100 text-yellow-800 font-semibold';
+                        else if (texto === 'NA' || texto === 'NC') clase = 'bg-gray-100 text-gray-600 font-semibold';
+                    }
+                    return {texto, clase};
+                };
                 bodyEl.innerHTML = '';
                 listaFilasUnicas.forEach(item => {
                     let filaHTML = `
@@ -488,6 +518,24 @@
                             <td class="p-2 border border-gray-200 text-xs text-gray-500 bg-gray-50 sticky-col col-frecuencia" title="${item.frecuencia}">${item.frecuencia}</td>
                     `;
 
+                    if (!esFrecuenciaPorTurno(item.frecuencia) && !item.esDobleMuestra && !tieneMuestrasMultiples.has(`${item.zona}|${item.parametroLimpio}`)) {
+                        // Agrupar todas las horas visibles de cada fecha (seis si se muestran tres turnos).
+                        fechasUnicas.forEach(fecha => {
+                            const columnasDia = mapaColumnas.filter(col => col.fecha === fecha);
+                            const valores = [];
+                            const turnosDia = [...new Set(columnasDia.map(col => col.turno))];
+                            for (const turno of turnosDia) {
+                                for (const sub of ['GEN', 'M1', 'M2']) {
+                                    const valor = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${fecha}|${turno}|${sub}`];
+                                    if (valor !== undefined && valor !== null && String(valor).trim() !== '') valores.push(valor);
+                                }
+                            }
+                            const programada = turnosDia.some(turno => programacionPorCelda.has(`${item.zona}|${item.parametroLimpio}|${fecha}|${turno}`));
+                            const valor = valores.length ? [...new Set(valores.map(String))].join(' / ') : undefined;
+                            const celda = aparienciaCelda(valor, programada);
+                            filaHTML += `<td colspan="${columnasDia.length}" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${celda.clase}">${celda.texto}</td>`;
+                        });
+                    } else {
                     let skipNextCol = 0;
                     mapaColumnas.forEach((col) => {
                         if (skipNextCol > 0) {
@@ -543,6 +591,7 @@
                         }
                     });
 
+                    } // Fin de presentación por turno.
                     filaHTML += `</tr>`;
                     bodyEl.innerHTML += filaHTML;
                 });
@@ -974,45 +1023,6 @@
  const side=document.querySelector('aside');
  if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
  else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
-})();</script><script src="/static/plan_calidad_compat.js"></script><script>
-// Ocultar únicamente el selector adicional «Resultado» que agrega el script de compatibilidad.
-// Se conservan el campo de medición y el selector independiente NA / NC / Pendiente.
-(function () {
-    const contenedor = document.getElementById('contenedor-parametros');
-    if (!contenedor) return;
-    function quitarSelectorDuplicado() {
-        contenedor.querySelectorAll('select').forEach(select => {
-            if (select.classList.contains('input-estado') || select.classList.contains('input-medida')) return;
-            const opciones = [...select.options];
-            const esSelectorResultado = opciones.some(o => o.textContent.trim().toLowerCase() === 'resultado') &&
-                opciones.some(o => /^(no aplica \(na\)|na|pendiente)$/i.test(o.textContent.trim()));
-            if (esSelectorResultado) select.remove();
-        });
-    }
-    new MutationObserver(quitarSelectorDuplicado).observe(contenedor, {childList: true, subtree: true});
-    quitarSelectorDuplicado();
-    // Mantener la sincronización aun cuando el script de compatibilidad redefina el manejador.
-    window.actualizarEstadoMedicion = function(select) {
-        const tarjeta = select.closest('.relative');
-        const input = tarjeta && tarjeta.querySelector('.input-medida');
-        if (!input) return;
-        if (!input.dataset.tipoOriginal) input.dataset.tipoOriginal = input.type;
-        if (select.value) {
-            input.type = 'text';
-            input.value = select.value;
-            input.readOnly = true;
-            input.disabled = false;
-            input.classList.remove('bg-red-100','border-red-500','text-red-700','font-bold');
-            const panel = document.getElementById(input.dataset.containerId);
-            if (panel) panel.classList.add('hidden');
-        } else {
-            input.readOnly = false;
-            input.disabled = false;
-            if (input.dataset.tipoOriginal === 'number') input.type = 'number';
-            if (['NA','NC','Pendiente'].includes(input.value)) input.value = '';
-        }
-    };
-})();
-</script>
+})();</script><script src="/static/plan_calidad_compat.js"></script>
 </body>
 </html>
