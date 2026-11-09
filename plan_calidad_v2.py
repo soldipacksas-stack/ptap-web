@@ -1,3 +1,4 @@
+
 """Plan de Calidad V2: almacenamiento seguro sin ALTER sobre tablas históricas."""
 import re
 from datetime import datetime, date
@@ -137,16 +138,28 @@ def evaluar(valor, limite, tipo):
     if m: return 'Cumple' if normal_num(m.group(1)) <= n <= normal_num(m.group(2)) else 'FUERA DE RANGO'
     raise HTTPException(422,f'Límite sin regla interpretable: {lim}. Revisar matriz maestra antes de guardar.')
 
+def estado_efectivo(item):
+    """Compatibilidad con formularios que envían el estado en valor."""
+    estado = (item.estado or 'Resultado').strip()
+    valor = (item.valor or '').strip()
+    if estado == 'Resultado' and valor.upper() in ('NA', 'NC', 'PENDIENTE', 'N/A'):
+        return {'NA':'NA', 'NC':'NC', 'PENDIENTE':'Pendiente', 'N/A':'NA'}[valor.upper()]
+    return estado
+
 def validar_item(item,p):
-    if item.estado not in ('Resultado','NA','NC','Pendiente'): raise HTTPException(422,'Estado inválido')
-    if item.estado == 'Resultado':
-        if not item.valor.strip(): raise HTTPException(422,f'Falta valor: {p.zona} / {p.parametro}')
-        resultado = evaluar(item.valor,limite_efectivo(p),p.tipo)
-        if resultado == 'FUERA DE RANGO' and not item.plan_accion.strip():
-            raise HTTPException(422,f'Plan de acción obligatorio: {p.zona} / {p.parametro}')
-        return resultado
-    if item.valor.strip() not in ('',item.estado): raise HTTPException(422,f'Valor incompatible con {item.estado}')
-    return item.estado
+    estado = estado_efectivo(item)
+    if estado not in ('Resultado','NA','NC','Pendiente'):
+        raise HTTPException(422,'Estado inválido')
+    if estado != 'Resultado':
+        if (item.valor or '').strip() not in ('', estado, 'N/A' if estado == 'NA' else estado):
+            raise HTTPException(422,f'Valor incompatible con {estado}')
+        return estado
+    if not (item.valor or '').strip():
+        raise HTTPException(422,f'Falta valor: {p.zona} / {p.parametro}')
+    resultado = evaluar(item.valor,limite_efectivo(p),p.tipo)
+    if resultado == 'FUERA DE RANGO' and not item.plan_accion.strip():
+        raise HTTPException(422,f'Plan de acción obligatorio: {p.zona} / {p.parametro}')
+    return resultado
 
 def serial(r, estado=None):
     return {'id':r.id,'fecha':r.fecha,'turno':r.turno,'operador':r.operador,'zona':r.zona,
@@ -203,9 +216,9 @@ def guardar(payload:Lote,db:Session=Depends(get_db)):
         for key,p in oblig.items():
             item=recibidos[key]; resultado=evaluados[key]
             r=models.RegistroPlanCalidad(fecha=payload.fecha,turno=payload.turno,operador=payload.operador,zona=p.zona,parametro=p.parametro,
-               valor=item.valor if item.estado=='Resultado' else item.estado,resultado=resultado,limite=limite_efectivo(p))
+               valor=item.valor if estado_efectivo(item)=='Resultado' else estado_efectivo(item),resultado=resultado,limite=limite_efectivo(p))
             db.add(r);db.flush()
-            db.add(Estado(registro_id=r.id,estado=item.estado,justificacion=item.justificacion.strip() if item.estado!='Resultado' else '',version_id=v.id))
+            db.add(Estado(registro_id=r.id,estado=estado_efectivo(item),justificacion='',version_id=v.id))
             guardar_plan(db,r,item,p,v,resultado,payload.operador,payload.fecha,payload.turno)
         db.commit()
     except Exception:db.rollback();raise
@@ -225,10 +238,10 @@ def editar(payload:Lote,db:Session=Depends(get_db)):
             s=db.query(Estado).filter_by(registro_id=r.id).first()
             anterior=serial(r,s)
             previo_fuera=r.resultado=='FUERA DE RANGO'
-            r.valor=item.valor if item.estado=='Resultado' else item.estado
+            r.valor=item.valor if estado_efectivo(item)=='Resultado' else estado_efectivo(item)
             r.resultado=resultado;r.limite=limite_efectivo(p)
             if not s:s=Estado(registro_id=r.id,version_id=v.id);db.add(s)
-            s.estado=item.estado;s.justificacion=item.justificacion.strip() if item.estado!='Resultado' else ''
+            s.estado=estado_efectivo(item);s.justificacion=''
             nuevo=serial(r,s)
             if anterior['valor']!=nuevo['valor'] or anterior['estado']!=nuevo['estado'] or anterior['justificacion']!=nuevo['justificacion']:
                 import json
@@ -303,3 +316,4 @@ def iniciar(maestra):
         for zona,parametro,frecuencia,dia,turno,limite,tipo in maestra:
             db.add(Parametro(version_id=v.id,zona=zona,parametro=parametro,frecuencia=frecuencia,dia=dia,turno=turno,limite=limite,tipo=tipo))
         db.commit()
+
