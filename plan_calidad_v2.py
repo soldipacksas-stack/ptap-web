@@ -151,6 +151,7 @@ def validar_item(item,p):
     if estado not in ('Resultado','NA','NC','Pendiente'):
         raise HTTPException(422,'Estado inválido')
     if estado != 'Resultado':
+        if not item.justificacion.strip(): raise HTTPException(422,f'Justificación obligatoria: {p.zona} / {p.parametro}')
         if (item.valor or '').strip() not in ('', estado, 'N/A' if estado == 'NA' else estado):
             raise HTTPException(422,f'Valor incompatible con {estado}')
         return estado
@@ -218,7 +219,7 @@ def guardar(payload:Lote,db:Session=Depends(get_db)):
             r=models.RegistroPlanCalidad(fecha=payload.fecha,turno=payload.turno,operador=payload.operador,zona=p.zona,parametro=p.parametro,
                valor=item.valor if estado_efectivo(item)=='Resultado' else estado_efectivo(item),resultado=resultado,limite=limite_efectivo(p))
             db.add(r);db.flush()
-            db.add(Estado(registro_id=r.id,estado=estado_efectivo(item),justificacion='',version_id=v.id))
+            db.add(Estado(registro_id=r.id,estado=estado_efectivo(item),justificacion=item.justificacion.strip() if estado_efectivo(item)!='Resultado' else '',version_id=v.id))
             guardar_plan(db,r,item,p,v,resultado,payload.operador,payload.fecha,payload.turno)
         db.commit()
     except Exception:db.rollback();raise
@@ -241,7 +242,7 @@ def editar(payload:Lote,db:Session=Depends(get_db)):
             r.valor=item.valor if estado_efectivo(item)=='Resultado' else estado_efectivo(item)
             r.resultado=resultado;r.limite=limite_efectivo(p)
             if not s:s=Estado(registro_id=r.id,version_id=v.id);db.add(s)
-            s.estado=estado_efectivo(item);s.justificacion=''
+            s.estado=estado_efectivo(item);s.justificacion=item.justificacion.strip() if estado_efectivo(item)!='Resultado' else ''
             nuevo=serial(r,s)
             if anterior['valor']!=nuevo['valor'] or anterior['estado']!=nuevo['estado'] or anterior['justificacion']!=nuevo['justificacion']:
                 import json
