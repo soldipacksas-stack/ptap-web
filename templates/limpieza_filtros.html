@@ -93,27 +93,20 @@
                 </div>
             </div>
 
-            <!-- Historial real: conteo de esterilizaciones desde PostgreSQL -->
-            <section class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6" aria-labelledby="tituloHistorial">
-              <h3 id="tituloHistorial" class="font-bold text-[#0B4934] mb-2">📊 Historial de esterilizaciones por filtro</h3>
-              <p class="text-xs text-gray-500 mb-4">Cantidad de esterilizaciones registradas. Solo se cuentan eventos de esterilización; no las limpiezas.</p>
+            <!-- Gráfica única de intervalos entre esterilizaciones -->
+            <section class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6" aria-labelledby="tituloCiclos">
+              <h3 id="tituloCiclos" class="font-bold text-[#0B4934] mb-2">📊 Tiempo entre esterilizaciones por filtro</h3>
+              <p class="text-xs text-gray-500 mb-4">Cada barra representa las horas entre dos esterilizaciones consecutivas del mismo filtro. La línea roja marca el límite de 48 horas. Los retrolavados no se contabilizan.</p>
               <div class="flex flex-wrap gap-3 mb-4 items-end">
-                <label class="text-sm">Desde <input id="histDesde" type="date" class="block border rounded p-2 mt-1"></label>
-                <label class="text-sm">Hasta <input id="histHasta" type="date" class="block border rounded p-2 mt-1"></label>
-                <label class="text-sm">Filtro <select id="histFiltro" class="block border rounded p-2 mt-1"><option value="">Todos</option><option>F121</option><option>F122</option><option>F123</option><option>F221</option><option>F222</option><option>F223</option></select></label>
-                <button type="button" id="histActualizar" class="bg-[#25846A] text-white rounded px-4 py-2">Actualizar</button>
+                <label class="text-sm">Período <select id="cicloPeriodo" class="block border rounded p-2 mt-1"><option value="semana">Semana</option><option value="mes" selected>Mes</option><option value="rango">Entre fechas</option></select></label>
+                <label class="text-sm">Desde <input id="cicloDesde" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Hasta <input id="cicloHasta" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Filtro <select id="cicloFiltro" class="block border rounded p-2 mt-1"><option value="">Todos los filtros</option><option>F121</option><option>F122</option><option>F123</option><option>F221</option><option>F222</option><option>F223</option></select></label>
+                <button type="button" id="cicloActualizar" class="bg-[#25846A] text-white rounded px-4 py-2">Actualizar</button>
               </div>
-              <p id="histEstado" class="text-sm text-gray-500" role="status"></p>
-              <div class="relative h-72 w-full"><canvas id="histEsterilizaciones" aria-label="Cantidad de esterilizaciones por filtro"></canvas></div>
+              <p id="cicloEstado" class="text-sm text-gray-600 mb-3" role="status"></p>
+              <div class="relative w-full" style="height:360px"><canvas id="graficaCiclos" aria-label="Horas entre esterilizaciones y límite de 48 horas"></canvas></div>
             </section>
-            <!-- Sección de Gráfica de Líneas Inferior -->
-            <div class="bg-white p-5 rounded-lg shadow border border-gray-200">
-                <h3 class="font-bold text-[#0b4f2f] mb-2">📊 Monitoreo Gráfico de Ciclos vs Límite de 48 Horas</h3>
-                <p class="text-xs text-gray-500 mb-4">Muestra las horas transcurridas desde la última esterilización en comparación con la línea límite.</p>
-                <div class="relative h-64 w-full">
-                    <canvas id="graficaFiltros"></canvas>
-                </div>
-            </div>
         </main>
     </div>
 
@@ -235,7 +228,7 @@
         document.getElementById('filtro_fecha').value = "";
 
         let cronometrosData = [];
-        let chartInstancia = null; let chartHistorial = null;
+        let chartInstancia = null;
 
         // Función auxiliar para calcular el timestamp real de finalización considerando medianoche
         function obtenerTimestampFin(reg) {
@@ -410,8 +403,7 @@
 
             cronometrosData = data.data;
             renderizarCronometrosYTanques();
-            actualizarGrafica();
-            actualizarHistorialEsterilizaciones();
+            actualizarGraficaCiclos();
         }
 
         async function eliminarRegistro(id) {
@@ -523,89 +515,80 @@
         }, 1000);
 
 
-        function fechaLocalISO(d) { return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'); }
-        function iniciarHistorial() {
-            const hoy = new Date(), inicio = new Date(hoy); inicio.setDate(inicio.getDate()-29);
-            document.getElementById('histDesde').value = fechaLocalISO(inicio);
-            document.getElementById('histHasta').value = fechaLocalISO(hoy);
-            ['histDesde','histHasta','histFiltro'].forEach(id=>document.getElementById(id).addEventListener('change',actualizarHistorialEsterilizaciones));
-            document.getElementById('histActualizar').addEventListener('click',actualizarHistorialEsterilizaciones);
-        }
-        function actualizarHistorialEsterilizaciones() {
-            const desde=document.getElementById('histDesde').value, hasta=document.getElementById('histHasta').value;
-            const seleccionado=document.getElementById('histFiltro').value;
-            const estado=document.getElementById('histEstado');
-            if(desde&&hasta&&desde>hasta){estado.textContent='La fecha inicial no puede ser posterior a la final.';return;}
-            const filtros=seleccionado?[seleccionado]:['F121','F122','F123','F221','F222','F223'];
-            const cantidades=filtros.map(equipo=>cronometrosData.filter(r=>{
-                const tipo=(r.tipo_limpieza||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-                return r.equipo===equipo && tipo.includes('esterilizacion') && (!desde||r.fecha>=desde) && (!hasta||r.fecha<=hasta);
-            }).length);
-            estado.textContent=cantidades.some(n=>n>0)?'Total de esterilizaciones: '+cantidades.reduce((a,b)=>a+b,0):'Sin esterilizaciones registradas en el período seleccionado.';
-            if(chartHistorial)chartHistorial.destroy();
-            chartHistorial=new Chart(document.getElementById('histEsterilizaciones'),{
-                type:'bar',data:{labels:filtros,datasets:[{label:'Esterilizaciones realizadas',data:cantidades,backgroundColor:'#25846A',hoverBackgroundColor:'#0B4934',borderRadius:5,maxBarThickness:70}]},
-                options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y+' esterilizaciones'}}},scales:{y:{beginAtZero:true,ticks:{precision:0,color:'#9AAAB0'},grid:{color:'#DCE9E3'}},x:{ticks:{color:'#0B4934'},grid:{display:false}}}}
-            });
-        }
-        document.addEventListener('DOMContentLoaded',iniciarHistorial);
-
-        function actualizarGrafica() {
-            const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
-            const ahora = new Date().getTime();
-            const horasTranscurridas = filtros.map(eq => {
-                const regs = cronometrosData.filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
-                    .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
-            
-                if (regs.length === 0) return 0;
-                const finTime = obtenerTimestampFin(regs[0]);
-                const diffHoras = (ahora - finTime) / (1000 * 60 * 60);
-                return diffHoras > 0 ? parseFloat(diffHoras.toFixed(1)) : 0;
-            });
-
-            const ctx = document.getElementById('graficaFiltros').getContext('2d');
-            
-            if (chartInstancia) {
-                chartInstancia.destroy();
-            }
-
-            chartInstancia = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: filtros,
-                    datasets: [
-                        {
-                            label: 'Horas desde última esterilización',
-                            data: horasTranscurridas,
-                            borderColor: '#25846A',
-                            backgroundColor: 'rgba(37, 132, 106, 0.12)',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.2
-                        },
-                        {
-                            label: 'Límite Máximo (48 Horas)',
-                            data: [48, 48, 48, 48, 48, 48],
-                            borderColor: '#C34E4E',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            fill: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: 'Horas Transcurridas' }
-                        }
-                    }
-                }
-            });
-        }
+         function fechaLocalISO(d) {
+             return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+         }
+         function fechaFinEsterilizacion(r) {
+             if (!r || !r.fecha || !/^\d{2}:\d{2}/.test(r.hora_final_est || '')) return NaN;
+             const fecha = new Date(r.fecha + 'T' + r.hora_final_est.slice(0,5) + ':00');
+             if (!Number.isFinite(fecha.getTime())) return NaN;
+             // La fecha almacenada corresponde al día de inicio; si cruza medianoche, el fin es al día siguiente.
+             if (/^\d{2}:\d{2}/.test(r.hora_inicio_est || '') && r.hora_final_est.slice(0,5) < r.hora_inicio_est.slice(0,5)) fecha.setDate(fecha.getDate()+1);
+             return fecha.getTime();
+         }
+         function esEsterilizacion(r) {
+             return (r.tipo_limpieza || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes('esterilizacion');
+         }
+         function aplicarPeriodoCiclos() {
+             const tipo = document.getElementById('cicloPeriodo').value;
+             const desde = document.getElementById('cicloDesde');
+             const hasta = document.getElementById('cicloHasta');
+             if (tipo === 'rango') { desde.disabled = false; hasta.disabled = false; return; }
+             const hoy = new Date(), inicio = new Date(hoy);
+             if (tipo === 'semana') inicio.setDate(hoy.getDate() - ((hoy.getDay()+6)%7));
+             else inicio.setDate(1);
+             desde.value = fechaLocalISO(inicio);
+             hasta.value = fechaLocalISO(hoy);
+             desde.disabled = true; hasta.disabled = true;
+         }
+         function iniciarGraficaCiclos() {
+             document.getElementById('cicloPeriodo').addEventListener('change', () => { aplicarPeriodoCiclos(); actualizarGraficaCiclos(); });
+             ['cicloDesde','cicloHasta','cicloFiltro'].forEach(id => document.getElementById(id).addEventListener('change', actualizarGraficaCiclos));
+             document.getElementById('cicloActualizar').addEventListener('click', actualizarGraficaCiclos);
+             aplicarPeriodoCiclos();
+         }
+         function actualizarGraficaCiclos() {
+             const desde = document.getElementById('cicloDesde').value;
+             const hasta = document.getElementById('cicloHasta').value;
+             const seleccionado = document.getElementById('cicloFiltro').value;
+             const estado = document.getElementById('cicloEstado');
+             if (desde && hasta && desde > hasta) { estado.textContent = 'La fecha inicial no puede ser posterior a la final.'; if(chartInstancia){chartInstancia.destroy();chartInstancia=null;} return; }
+             const equipos = seleccionado ? [seleccionado] : ['F121','F122','F123','F221','F222','F223'];
+             const barras = [];
+             let totalEventos = 0, sinAnterior = 0;
+             equipos.forEach(equipo => {
+                 const eventos = cronometrosData.filter(r => r.equipo === equipo && esEsterilizacion(r))
+                     .map(r => ({ms:fechaFinEsterilizacion(r)})).filter(r => Number.isFinite(r.ms))
+                     .sort((a,b) => a.ms-b.ms);
+                 eventos.forEach((evento,i) => {
+                     const fecha = fechaLocalISO(new Date(evento.ms));
+                     if ((desde && fecha < desde) || (hasta && fecha > hasta)) return;
+                     totalEventos++;
+                     if (i === 0) { sinAnterior++; return; }
+                     const horas = (evento.ms-eventos[i-1].ms)/3600000;
+                     barras.push({equipo, fecha, ms:evento.ms, horas:Number(horas.toFixed(2))});
+                 });
+             });
+             barras.sort((a,b) => a.ms-b.ms || a.equipo.localeCompare(b.equipo));
+             const fuera = barras.filter(b => b.horas > 48).length;
+             estado.textContent = `Esterilizaciones en el período: ${totalEventos} · Intervalos calculados: ${barras.length} · Intervalos superiores a 48 h: ${fuera}` + (sinAnterior ? ` · ${sinAnterior} sin esterilización previa para comparar` : '');
+             if (chartInstancia) chartInstancia.destroy();
+             chartInstancia = new Chart(document.getElementById('graficaCiclos'), {
+                 type:'bar',
+                 data: {
+                     labels:barras.map(b => b.fecha.split('-').reverse().join('/') + (seleccionado ? '' : ' · '+b.equipo)),
+                     datasets:[
+                         {label:'Horas entre esterilizaciones',data:barras.map(b=>b.horas),backgroundColor:barras.map(b=>b.horas>48?'#C38A28':'#25846A'),borderRadius:4,maxBarThickness:55},
+                         {type:'line',label:'Límite 48 horas',data:barras.map(()=>48),borderColor:'#C34E4E',borderDash:[7,5],borderWidth:2,pointRadius:0,fill:false}
+                     ]
+                 },
+                 options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{
+                     tooltip:{callbacks:{title:items=>{const b=barras[items[0].dataIndex];return b?b.fecha+' · '+b.equipo:'';},label:item=>item.datasetIndex===0?'Intervalo: '+item.parsed.y+' horas':'Límite: 48 horas'}},
+                     legend:{position:'top'}
+                 },scales:{x:{title:{display:true,text:'Fecha de esterilización (y filtro)'},ticks:{maxRotation:60,minRotation:35,autoSkip:true},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Horas entre esterilizaciones'}}}}
+             });
+         }
+         document.addEventListener('DOMContentLoaded', iniciarGraficaCiclos);
 
         async function enviarRegistroFiltro() {
             const registroId = document.getElementById('form_registro_id').value;
