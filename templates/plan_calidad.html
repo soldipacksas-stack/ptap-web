@@ -305,14 +305,46 @@
                 const dataReg = await resReg.json();
                 const registrosBD = dataReg.data || [];
 
-                const resMaestra = await fetch(`/api/plan-calidad/maestra?fecha=${desde}&turno=${turnoSel}`);
-                const dataMaestra = await resMaestra.json();
-                const listaMaestra = dataMaestra.maestra || [];
-
-                const fechasUnicas = [...new Set(registrosBD.map(r => r.fecha))].sort();
-                if (fechasUnicas.length === 0 && desde) {
-                    fechasUnicas.push(desde);
+                // Programación consultada por cada fecha y turno, sin modificar la BD.
+                const fechasProgramacion = [];
+                const cursor = new Date(desde + 'T12:00:00');
+                const final = new Date(hasta + 'T12:00:00');
+                while (cursor <= final) {
+                    const y = cursor.getFullYear();
+                    const m = String(cursor.getMonth() + 1).padStart(2, '0');
+                    const d = String(cursor.getDate()).padStart(2, '0');
+                    fechasProgramacion.push(`${y}-${m}-${d}`);
+                    cursor.setDate(cursor.getDate() + 1);
                 }
+                const turnosProgramacion = turnoSel === 'Todos'
+                    ? ['Turno 1', 'Turno 2', 'Turno 3'] : [turnoSel];
+                const programacionPorCelda = new Set();
+                const listaMaestra = [];
+                const filasVistas = new Set();
+                const consultas = fechasProgramacion.flatMap(fecha =>
+                    turnosProgramacion.map(turno => ({fecha, turno})));
+                const respuestas = await Promise.all(consultas.map(async ({fecha, turno}) => {
+                    const url = `/api/plan-calidad/maestra?fecha=${fecha}&turno=${encodeURIComponent(turno)}`;
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error(`Error al consultar matriz ${fecha} ${turno}`);
+                    const data = await res.json();
+                    if (!Array.isArray(data.maestra)) throw new Error(`Matriz inválida ${fecha} ${turno}`);
+                    return {fecha, turno, filas: data.maestra};
+                }));
+                respuestas.forEach(({fecha, turno, filas}) => {
+                    filas.forEach(fila => {
+                        const [zona, param] = fila;
+                        const limpio = String(param).replace(/\s*\(Muestra\s*[12]\)/gi, '').trim();
+                        programacionPorCelda.add(`${zona}|${limpio}|${fecha}|${turno}`);
+                        const claveFila = `${zona}|${param}`;
+                        if (!filasVistas.has(claveFila)) {
+                            filasVistas.add(claveFila);
+                            listaMaestra.push(fila);
+                        }
+                    });
+                });
+
+                const fechasUnicas = fechasProgramacion;
 
                 const headEl = document.getElementById('header-matriz');
                 const bodyEl = document.getElementById('body-tabla');
@@ -488,10 +520,15 @@
                             }
                         }
 
-                        let displayTexto = (valMedido !== undefined && valMedido !== null && valMedido !== '') ? valMedido : '-';
-                        let estilo = 'text-gray-400 italic';
+                        const claveProgramacion = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
+                        const estaProgramado = programacionPorCelda.has(claveProgramacion);
+                        const tieneResultado = valMedido !== undefined && valMedido !== null && String(valMedido).trim() !== '';
+                        let displayTexto = tieneResultado ? valMedido : (estaProgramado ? '-' : 'NC');
+                        let estilo = (!tieneResultado && !estaProgramado)
+                            ? 'bg-gray-100 text-gray-500 font-semibold'
+                            : 'text-gray-400 italic';
 
-                        if (displayTexto !== '-') {
+                        if (tieneResultado) {
                             estilo = 'font-semibold text-gray-900';
                             if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                                 estilo = 'bg-red-100 text-red-700 font-bold';
