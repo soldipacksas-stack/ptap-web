@@ -230,11 +230,23 @@ def editar(payload:Lote,db:Session=Depends(get_db)):
     rs=db.query(models.RegistroPlanCalidad).filter_by(fecha=payload.fecha,turno=payload.turno).with_for_update().all()
     bykey=defaultdict(list)
     for r in rs:bykey[(r.zona,r.parametro)].append(r)
-    if any(len(bykey[k])>1 for k in oblig):raise HTTPException(409,'Hay duplicados históricos; requiere conciliación antes de editar')
-    if any(k not in bykey for k in oblig):raise HTTPException(409,'Registro incompleto. Requiere conciliación histórica antes de editar')
+    # Cada lectura debe identificarse explícitamente. Nunca escoger automáticamente
+    # un registro histórico cuando existen varios con la misma clave programada.
+    if any(k not in bykey for k in oblig):
+        raise HTTPException(409,'Registro incompleto. Requiere conciliación histórica antes de editar')
+    ids = [recibidos[k].id for k in oblig]
+    if any(i is None for i in ids) or len(set(ids)) != len(ids):
+        raise HTTPException(409,'La edición requiere un ID único por cada medición programada')
+    seleccionados = {}
+    for key in oblig:
+        item_id = recibidos[key].id
+        candidato = next((r for r in bykey[key] if r.id == item_id), None)
+        if candidato is None:
+            raise HTTPException(409,f'El registro ID {item_id} no pertenece a la muestra seleccionada o cambió desde su consulta')
+        seleccionados[key] = candidato
     try:
         for key,p in oblig.items():
-            r=bykey[key][0];item=recibidos[key];resultado=evaluados[key]
+            r=seleccionados[key];item=recibidos[key];resultado=evaluados[key]
             s=db.query(Estado).filter_by(registro_id=r.id).first()
             anterior=serial(r,s)
             previo_fuera=r.resultado=='FUERA DE RANGO'
