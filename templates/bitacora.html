@@ -37,6 +37,18 @@
             <!-- Panel de Historial / Filtros -->
             <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
                 <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Historial de Bitácora</h3>
+                <div class="flex flex-wrap items-end gap-3 mb-3 text-sm">
+                    <div><label class="block font-semibold mb-1">Consultar por</label><select id="bit_periodo" onchange="cambiarPeriodoBit()" class="border rounded p-2"><option value="ultimos7">Últimos 7 días</option><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="rango">Entre fechas</option></select></div>
+                    <div id="bit_fecha_wrap"><label class="block font-semibold mb-1">Fecha de referencia</label><input id="bit_filtro_fecha" type="date" class="border rounded p-2"></div>
+                    <div id="bit_desde_wrap" class="hidden"><label class="block font-semibold mb-1">Desde</label><input id="bit_desde" type="date" class="border rounded p-2"></div>
+                    <div id="bit_hasta_wrap" class="hidden"><label class="block font-semibold mb-1">Hasta</label><input id="bit_hasta" type="date" class="border rounded p-2"></div>
+                    <div><label class="block font-semibold mb-1">Turno</label><select id="bit_filtro_turno" class="border rounded p-2"><option value="">Todos</option><option value="Turno 1">Turno 1</option><option value="Turno 2">Turno 2</option><option value="Turno 3">Turno 3</option></select></div>
+                    <div><label class="block font-semibold mb-1">Operador</label><input id="bit_filtro_operador" placeholder="Buscar operador" class="border rounded p-2 w-36"></div>
+                    <div><label class="block font-semibold mb-1">Palabras del reporte</label><input id="bit_filtro_texto" placeholder="Buscar novedad" class="border rounded p-2 w-40"></div>
+                    <button onclick="pintarBitacora()" class="bg-[#0b4f2f] text-white rounded px-4 py-2">Consultar</button>
+                    <button id="bit_modificar" onclick="modificarBitacora()" disabled class="bg-amber-600 disabled:opacity-40 text-white rounded px-4 py-2">Modificar registro</button>
+                </div>
+                <p id="bit_resumen" class="text-xs text-gray-500 mb-2"></p>
                 <div class="overflow-x-auto max-h-[500px]">
                     <table class="w-full text-left text-xs">
                         <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
@@ -60,7 +72,7 @@
     <div id="modalBitacora" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl flex flex-col">
             <div class="p-4 bg-[#0b3d2e] text-white rounded-t-xl flex justify-between items-center">
-                <h3 class="text-lg font-bold">📝 Registrar Novedad en Bitácora</h3>
+                <h3 id="bit_titulo" class="text-lg font-bold">📝 Registrar Novedad en Bitácora</h3>
                 <button onclick="cerrarModalBitacora()" class="text-xl font-bold">&times;</button>
             </div>
             
@@ -97,78 +109,100 @@
 
             <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
                 <button onclick="cerrarModalBitacora()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
-                <button onclick="guardarBitacora()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Reporte</button>
+                <button id="bit_guardar" onclick="guardarBitacora()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Reporte</button>
             </div>
         </div>
     </div>
 
     <script>
-        const hoyStr = new Date().toISOString().split('T')[0];
-        document.getElementById('bit_fecha').value = hoyStr;
-
-        function abrirModalBitacora() {
-            document.getElementById('modalBitacora').classList.remove('hidden');
-            document.getElementById('modalBitacora').classList.add('flex');
+        const fechaLocalBit=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        let registrosBit=[],seleccionBit=null,editandoBit=null;
+        for(const id of ['bit_fecha','bit_filtro_fecha','bit_desde','bit_hasta'])document.getElementById(id).value=fechaLocalBit();
+        const diaBit=r=>String(r.fecha??'').slice(0,10);
+        function cambiarPeriodoBit(){
+            const p=document.getElementById('bit_periodo').value;
+            document.getElementById('bit_fecha_wrap').classList.toggle('hidden',p==='rango'||p==='ultimos7');
+            document.getElementById('bit_desde_wrap').classList.toggle('hidden',p!=='rango');
+            document.getElementById('bit_hasta_wrap').classList.toggle('hidden',p!=='rango');
+            pintarBitacora();
         }
-
-        function cerrarModalBitacora() {
-            document.getElementById('modalBitacora').classList.add('hidden');
-            document.getElementById('modalBitacora').classList.remove('flex');
+        function limitesBit(){
+            const p=document.getElementById('bit_periodo').value,f=document.getElementById('bit_filtro_fecha').value;
+            if(p==='rango')return [document.getElementById('bit_desde').value,document.getElementById('bit_hasta').value];
+            if(p==='ultimos7'){const d=new Date();d.setDate(d.getDate()-6);return [fechaLocalBit(d),fechaLocalBit()];}
+            if(!f)return ['',''];
+            if(p==='dia')return [f,f];
+            const [y,m,day]=f.split('-').map(Number);
+            if(p==='mes')return [`${y}-${String(m).padStart(2,'0')}-01`,fechaLocalBit(new Date(y,m,0))];
+            const d=new Date(y,m-1,day),lunes=new Date(d);lunes.setDate(d.getDate()-(d.getDay()+6)%7);
+            const domingo=new Date(lunes);domingo.setDate(lunes.getDate()+6);
+            return [fechaLocalBit(lunes),fechaLocalBit(domingo)];
         }
-
-        async function cargarBitacora() {
-            const res = await fetch('/api/bitacora/registros');
-            const data = await res.json();
-            const tbody = document.getElementById('body-tabla-bitacora');
-            tbody.innerHTML = '';
-
-            if (!data.data || data.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 italic">No hay reportes registrados en la bitácora.</td></tr>';
-                return;
+        function mostrarModalBit(){document.getElementById('modalBitacora').classList.remove('hidden');document.getElementById('modalBitacora').classList.add('flex');}
+        function abrirModalBitacora(){
+            editandoBit=null;
+            document.getElementById('bit_fecha').value=fechaLocalBit();
+            document.getElementById('bit_turno').value='Turno 1';
+            document.getElementById('bit_reporte').value='';
+            document.getElementById('bit_titulo').textContent='📝 Registrar Novedad en Bitácora';
+            document.getElementById('bit_guardar').textContent='Guardar Reporte';
+            mostrarModalBit();
+        }
+        function cerrarModalBitacora(){document.getElementById('modalBitacora').classList.add('hidden');document.getElementById('modalBitacora').classList.remove('flex');editandoBit=null;}
+        function elegirOpcionBit(id,valor){
+            const sel=document.getElementById(id),v=String(valor??'');
+            if(v&&!Array.from(sel.options).some(o=>o.value===v))sel.add(new Option(v+' (registro histórico)',v));
+            sel.value=v;
+        }
+        function pintarBitacora(){
+            const tbody=document.getElementById('body-tabla-bitacora');tbody.replaceChildren();
+            const [desde,hasta]=limitesBit();
+            if(!desde||!hasta||desde>hasta){document.getElementById('bit_resumen').textContent='Seleccione un rango válido.';document.getElementById('bit_modificar').disabled=true;return;}
+            const turno=document.getElementById('bit_filtro_turno').value;
+            const operador=document.getElementById('bit_filtro_operador').value.trim().toLocaleLowerCase();
+            const texto=document.getElementById('bit_filtro_texto').value.trim().toLocaleLowerCase();
+            const filtrados=registrosBit.filter(r=>diaBit(r)>=desde&&diaBit(r)<=hasta&&(!turno||r.turno===turno)&&String(r.operador??'').toLocaleLowerCase().includes(operador)&&String(r.reporte??'').toLocaleLowerCase().includes(texto));
+            document.getElementById('bit_resumen').textContent=`${filtrados.length} registro(s) del ${desde} al ${hasta}. Seleccione una fila para modificar.`;
+            if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=4;td.className='p-4 text-center text-gray-500 italic';td.textContent='No hay reportes para los filtros seleccionados.';tr.appendChild(td);tbody.appendChild(tr);}
+            for(const r of filtrados){
+                const tr=document.createElement('tr');tr.className='hover:bg-green-50 cursor-pointer '+(seleccionBit!==null&&seleccionBit===r.id?'bg-green-100':'');tr.tabIndex=0;
+                const seleccionar=()=>{seleccionBit=r.id;pintarBitacora();};tr.onclick=seleccionar;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();seleccionar();}};
+                for(const v of [diaBit(r),r.turno,r.operador,r.reporte]){const td=document.createElement('td');td.className='p-3 border-b';if(v===r.reporte)td.classList.add('whitespace-pre-wrap');td.textContent=String(v??'');tr.appendChild(td);}
+                tbody.appendChild(tr);
             }
-
-            data.data.forEach(item => {
-                tbody.innerHTML += `
-                    <tr class="hover:bg-gray-50">
-                        <td class="p-3 border-b font-medium">${item.fecha}</td>
-                        <td class="p-3 border-b">${item.turno}</td>
-                        <td class="p-3 border-b">${item.operador}</td>
-                        <td class="p-3 border-b whitespace-pre-wrap">${item.reporte}</td>
-                    </tr>
-                `;
-            });
+            document.getElementById('bit_modificar').disabled=!filtrados.some(r=>r.id!=null&&r.id===seleccionBit);
         }
-
-        async function guardarBitacora() {
-            const payload = {
-                fecha: document.getElementById('bit_fecha').value,
-                turno: document.getElementById('bit_turno').value,
-                operador: document.getElementById('bit_operador').value,
-                reporte: document.getElementById('bit_reporte').value
-            };
-
-            if (!payload.reporte.trim()) {
-                alert("Por favor escriba el reporte o novedad.");
-                return;
-            }
-
-            const res = await fetch('/api/bitacora/guardar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                alert("¡Reporte guardado con éxito en la Bitácora y Excel!");
-                cerrarModalBitacora();
-                document.getElementById('bit_reporte').value = '';
-                cargarBitacora();
-            } else {
-                alert("Error al guardar la bitácora.");
-            }
+        async function cargarBitacora(){
+            try{
+                const res=await fetch('/api/bitacora/registros');if(!res.ok)throw new Error('HTTP '+res.status);
+                const data=await res.json();registrosBit=Array.isArray(data.data)?data.data:[];
+                if(!registrosBit.some(r=>r.id!=null&&r.id===seleccionBit))seleccionBit=null;
+                pintarBitacora();
+            }catch(e){document.getElementById('bit_resumen').textContent='Error al cargar bitácora: '+e.message;}
         }
-
-        cargarBitacora();
+        function modificarBitacora(){
+            const r=registrosBit.find(x=>x.id!=null&&x.id===seleccionBit);if(!r)return;
+            editandoBit=r.id;
+            document.getElementById('bit_fecha').value=diaBit(r);
+            elegirOpcionBit('bit_turno',r.turno);
+            elegirOpcionBit('bit_operador',r.operador);
+            document.getElementById('bit_reporte').value=String(r.reporte??'');
+            document.getElementById('bit_titulo').textContent='✏️ Modificar novedad de Bitácora';
+            document.getElementById('bit_guardar').textContent='Guardar cambios';mostrarModalBit();
+        }
+        async function guardarBitacora(){
+            const payload={fecha:document.getElementById('bit_fecha').value,turno:document.getElementById('bit_turno').value,operador:document.getElementById('bit_operador').value,reporte:document.getElementById('bit_reporte').value};
+            if(!payload.fecha||!payload.turno||!payload.operador||!payload.reporte.trim()){alert('Complete fecha, turno, operador y reporte.');return;}
+            const id=editandoBit,btn=document.getElementById('bit_guardar');btn.disabled=true;
+            try{
+                const url=id==null?'/api/bitacora/guardar':'/api/bitacora/actualizar/'+encodeURIComponent(id);
+                const res=await fetch(url,{method:id==null?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+                if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(typeof e.detail==='string'?e.detail:'HTTP '+res.status);}
+                cerrarModalBitacora();await cargarBitacora();alert(id==null?'Reporte guardado correctamente.':'Reporte actualizado correctamente.');
+            }catch(e){alert('No se guardó el reporte: '+e.message+'\nSi aparece HTTP 404/405, hay que implementar la ruta de actualización en Python.');}
+            finally{btn.disabled=false;}
+        }
+        cambiarPeriodoBit();cargarBitacora();
     </script>
 <script>(function(){
  const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
