@@ -22,9 +22,6 @@ function decorate(){
  for(const inp of fieldRows()){
   const card=inp.closest('.relative'),sel=card?.querySelector('.input-estado');if(!sel)continue;
   if(inp.tagName==='INPUT')inp.dataset.originalType=inp.type;
-  if(!card.querySelector('.pc-justificacion')){
-   const just=document.createElement('input');just.type='text';just.className='pc-justificacion hidden border rounded p-1 text-xs w-full mt-1';just.placeholder='Justificación obligatoria para NA, NC o Pendiente';sel.insertAdjacentElement('afterend',just);
-  }
   sel.onchange=()=>refreshState(sel);
   inp.addEventListener('input',()=>{if(!sel.value&&inp.value)try{validarCasillaMedicion(inp)}catch(_){}});
  }
@@ -42,7 +39,7 @@ function itemData(inp){
 window.enviarFormulario=async function(){
  const items=fieldRows().map(itemData);
  if(!items.length){alert('No hay parámetros programados para guardar.');return;}
- for(const item of items){if(item.estado==='Resultado'&&!item.valor){alert('Falta resultado: '+item.zona+' / '+item.parametro);return;}if(item.estado!=='Resultado'&&!item.justificacion){alert('Falta justificación: '+item.zona+' / '+item.parametro);return;}
+ for(const item of items){if(item.estado==='Resultado'&&!item.valor){alert('Falta resultado: '+item.zona+' / '+item.parametro);return;}
  }
  if(items.some(i=>i.estado==='Pendiente')&&!confirm('Hay análisis pendientes. ¿Desea guardar el turno?'))return;
  try{
