@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, UniqueConstraint
 from datetime import datetime
 from database import Base
 
@@ -113,3 +113,17 @@ class RegistroOperacional(Base):
     datos_json = Column(Text, nullable=False)
     creado_en = Column(DateTime, default=datetime.now)
     actualizado_en = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class VerificacionLaboratorio(Base):
+    __tablename__ = "ptap_verificaciones_laboratorio"
+    id = Column(Integer, primary_key=True)
+    instrumento = Column(String(30), nullable=False)
+    fecha = Column(String(10), nullable=False)
+    porcentaje = Column(Float, nullable=True)
+    pendiente = Column(Float, nullable=False)
+    lectura_patron = Column(Float, nullable=True)
+    operador = Column(String(150), nullable=False)
+    observaciones = Column(Text, nullable=True)
+    resultado = Column(String(20), nullable=False)
+    __table_args__ = (UniqueConstraint('instrumento', 'fecha', name='uq_lab_instrumento_fecha'),)

@@ -916,6 +916,8 @@ def _salida_operacional(r):
 
 @app.get("/operacion/{modulo}", response_class=HTMLResponse)
 def pagina_operacional(modulo: str, request: Request):
+    if modulo == "laboratorio":
+        return templates.TemplateResponse(request, "verificacion_laboratorio.html", {"request":request,"operadores":OPERADORES_PTAP})
     if modulo not in MODULOS_COMPLEMENTARIOS:
         raise HTTPException(404, "Módulo no encontrado")
     return templates.TemplateResponse(request, "operacion.html", {
@@ -1167,3 +1169,110 @@ def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
     tot['documental']=round(100*(tot['realizados']+tot['pendientes']+tot['na'])/tot['programados'],1) if tot['programados'] else None
     return {'desde':desde,'hasta':hasta,'total':tot,'dias':dias,'alertas':sorted(alertas,key=lambda x:(x['fecha'],x['id']),reverse=True),
             'zonas_disponibles':sorted({p.zona for p in db.query(pc.Parametro).all()})}
+
+# Verificaciones de laboratorio: dos instrumentos, sin alterar otros módulos.
+from sqlalchemy.exc import IntegrityError
+
+class VerificacionLabEntrada(BaseModel):
+    instrumento: str
+    fecha: str
+    porcentaje: Optional[float] = None
+    pendiente: float
+    lectura_patron: Optional[float] = None
+    operador: str
+    observaciones: str = ""
+
+
+def _lab_validar(payload: VerificacionLabEntrada):
+    if payload.instrumento not in ("ph", "conductivimetro"):
+        raise HTTPException(422, "Instrumento inválido")
+    try:
+        f = date.fromisoformat(payload.fecha)
+    except ValueError:
+        raise HTTPException(422, "Fecha inválida")
+    if f > date.today():
+        raise HTTPException(422, "No se admiten verificaciones futuras")
+    if payload.instrumento == "conductivimetro" and f.weekday() not in (2, 6):
+        raise HTTPException(422, "Conductivímetro: solo miércoles y domingos")
+    if payload.operador not in OPERADORES_PTAP:
+        raise HTTPException(422, "Seleccione un operador válido")
+    if len(payload.observaciones) > 2000:
+        raise HTTPException(422, "Observaciones demasiado extensas")
+    if not math.isfinite(payload.pendiente):
+        raise HTTPException(422, "Pendiente inválida")
+    if payload.instrumento == "ph":
+        if payload.porcentaje is None or not math.isfinite(payload.porcentaje) or not 0 <= payload.porcentaje <= 100:
+            raise HTTPException(422, "Porcentaje inválido")
+        if payload.pendiente >= 0:
+            raise HTTPException(422, "La pendiente del pH-metro debe ser negativa")
+        if payload.lectura_patron is not None:
+            raise HTTPException(422, "El pH-metro no requiere lectura de patrón")
+        aprobado = payload.porcentaje >= 95 and -59.2 <= payload.pendiente <= -57.2
+    else:
+        if payload.lectura_patron is None or not math.isfinite(payload.lectura_patron) or payload.lectura_patron < 0:
+            raise HTTPException(422, "Ingrese la lectura del patrón")
+        if payload.porcentaje is not None:
+            raise HTTPException(422, "El conductivímetro no requiere porcentaje")
+        aprobado = 0.350 <= payload.pendiente <= 0.520
+    return "APROBADO" if aprobado else "NO APROBADO"
+
+
+def _lab_salida(r):
+    return {"id":r.id,"instrumento":r.instrumento,"fecha":r.fecha,"porcentaje":r.porcentaje,
+            "pendiente":r.pendiente,"lectura_patron":r.lectura_patron,
+            "operador":r.operador,"observaciones":r.observaciones,"resultado":r.resultado}
+
+@app.get("/verificacion-laboratorio", response_class=HTMLResponse)
+def pagina_verificacion_laboratorio(request: Request):
+    return templates.TemplateResponse(request, "verificacion_laboratorio.html", {"request":request,"operadores":OPERADORES_PTAP})
+
+@app.get("/api/verificacion-laboratorio")
+def listar_verificaciones_laboratorio(instrumento: str, desde: str, hasta: str, db: Session=Depends(get_db)):
+    if instrumento not in ("ph","conductivimetro"):
+        raise HTTPException(422,"Instrumento inválido")
+    try:
+        d1,d2=date.fromisoformat(desde),date.fromisoformat(hasta)
+    except ValueError:
+        raise HTTPException(422,"Fechas inválidas")
+    if d2 < d1 or (d2-d1).days > 370:
+        raise HTTPException(422,"Seleccione un período de hasta 371 días")
+    rows=db.query(models.VerificacionLaboratorio).filter(
+        models.VerificacionLaboratorio.instrumento==instrumento,
+        models.VerificacionLaboratorio.fecha>=desde,
+        models.VerificacionLaboratorio.fecha<=hasta).all()
+    return {"data":[_lab_salida(r) for r in rows]}
+
+@app.post("/api/verificacion-laboratorio")
+def crear_verificacion_laboratorio(payload: VerificacionLabEntrada, request: Request, db: Session=Depends(get_db)):
+    _clave_operacion(request)
+    resultado=_lab_validar(payload)
+    r=models.VerificacionLaboratorio(**payload.model_dump(), resultado=resultado)
+    db.add(r)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409,"Ya existe una verificación para esta fecha. Use Modificar registro")
+    db.refresh(r)
+    return _lab_salida(r)
+
+@app.put("/api/verificacion-laboratorio/{registro_id}")
+def editar_verificacion_laboratorio(registro_id:int,payload:VerificacionLabEntrada,request:Request,db:Session=Depends(get_db)):
+    _clave_operacion(request)
+    resultado=_lab_validar(payload)
+    r=db.query(models.VerificacionLaboratorio).filter_by(id=registro_id).first()
+    if not r: raise HTTPException(404,"Registro no encontrado")
+    if r.fecha!=payload.fecha or r.instrumento!=payload.instrumento:
+        raise HTTPException(422,"No se puede cambiar la fecha o el instrumento original")
+    for k,v in payload.model_dump().items(): setattr(r,k,v)
+    r.resultado=resultado
+    db.commit()
+    return _lab_salida(r)
+
+@app.delete("/api/verificacion-laboratorio/{registro_id}")
+def eliminar_verificacion_laboratorio(registro_id:int,request:Request,db:Session=Depends(get_db)):
+    _clave_operacion(request)
+    r=db.query(models.VerificacionLaboratorio).filter_by(id=registro_id).first()
+    if not r: raise HTTPException(404,"Registro no encontrado")
+    db.delete(r);db.commit()
+    return {"status":"eliminado"}
