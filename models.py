@@ -127,3 +127,31 @@ class VerificacionLaboratorio(Base):
     observaciones = Column(Text, nullable=True)
     resultado = Column(String(20), nullable=False)
     __table_args__ = (UniqueConstraint('instrumento', 'fecha', name='uq_lab_instrumento_fecha'),)
+
+class QuimicoProducto(Base):
+    __tablename__ = 'inv_quimicos_productos'
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(140), nullable=False)
+    sap = Column(String(40), default='')
+    unidad = Column(String(12), default='kg')
+    activo = Column(Integer, default=1, nullable=False)
+
+class QuimicoExistencia(Base):
+    __tablename__ = 'inv_quimicos_existencias'
+    id = Column(Integer, primary_key=True)
+    producto_id = Column(Integer, nullable=False, index=True)
+    fecha = Column(String(10), nullable=False, index=True)
+    cantidad = Column(Float, nullable=False)
+    operador = Column(String(120), default='')
+    observaciones = Column(Text, default='')
+    inicial = Column(Integer, default=0)
+    __table_args__ = (UniqueConstraint('producto_id','fecha',name='uq_inv_quimico_fecha'),)
+
+class QuimicoEntrada(Base):
+    __tablename__ = 'inv_quimicos_entradas'
+    id = Column(Integer, primary_key=True)
+    producto_id = Column(Integer, nullable=False, index=True)
+    fecha = Column(String(10), nullable=False, index=True)
+    cantidad = Column(Float, nullable=False)
+    operador = Column(String(120), default='')
+    observaciones = Column(Text, default='')

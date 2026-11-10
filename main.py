@@ -1276,3 +1276,7 @@ def eliminar_verificacion_laboratorio(registro_id:int,request:Request,db:Session
     if not r: raise HTTPException(404,"Registro no encontrado")
     db.delete(r);db.commit()
     return {"status":"eliminado"}
+
+# Inventario de Químicos: implementación independiente, sin alterar módulos anteriores.
+from inventario_quimicos import setup as configurar_inventario
+app.include_router(configurar_inventario(templates, OPERADORES_PTAP, _clave_operacion))
