@@ -503,13 +503,13 @@
                 };
                 const aparienciaCelda = (valor, programada) => {
                     const tieneValor = valor !== undefined && valor !== null && String(valor).trim() !== '';
-                    const texto = tieneValor ? valor : (programada ? '-' : 'NC');
+                    const texto = tieneValor ? valor : (programada ? '-' : 'NA');
                     let clase = !tieneValor && !programada ? 'bg-gray-100 text-gray-500 font-semibold' : 'text-gray-400 italic';
                     if (tieneValor) {
                         clase = 'font-semibold text-gray-900';
                         if (['FUERA DE RANGO', 'No pasa', 'No cumple'].includes(String(texto))) clase = 'bg-red-100 text-red-700 font-bold';
                         else if (texto === 'Pendiente') clase = 'bg-yellow-100 text-yellow-800 font-semibold';
-                        else if (texto === 'NA' || texto === 'NC') clase = 'bg-gray-100 text-gray-600 font-semibold';
+                        else if (['NA', 'NC', 'FS', 'E', 'NR'].includes(String(texto))) clase = 'bg-gray-100 text-gray-600 font-semibold';
                     }
                     return {texto, clase};
                 };
@@ -576,7 +576,7 @@
                         const claveProgramacion = `${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}`;
                         const estaProgramado = programacionPorCelda.has(claveProgramacion);
                         const tieneResultado = valMedido !== undefined && valMedido !== null && String(valMedido).trim() !== '';
-                        let displayTexto = tieneResultado ? valMedido : (estaProgramado ? '-' : 'NC');
+                        let displayTexto = tieneResultado ? valMedido : (estaProgramado ? '-' : 'NA');
                         let estilo = (!tieneResultado && !estaProgramado)
                             ? 'bg-gray-100 text-gray-500 font-semibold'
                             : 'text-gray-400 italic';
@@ -784,11 +784,17 @@
                                         <select class="input-estado border rounded p-2 text-sm w-full mt-1" aria-label="Estado de la medición" onchange="actualizarEstadoMedicion(this)">
                                             <option value="" selected></option>
                                             <option value="NA">NA</option>
-                                            <option value="NC">NC</option>
+                                            <option value="FS">FS — Fuera de servicio</option>
+                                            <option value="E">E — Esterilización</option>
+                                            <option value="NR">NR — No reporta</option>
                                             <option value="Pendiente">Pendiente</option>
                                         </select>
                                     </div>
                                     <span class="text-xs text-gray-500 whitespace-nowrap">${limiteTextoForm}</span>
+                                </div>
+                                <div class="panel-justificacion-pendiente hidden mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                    <label class="block text-xs font-bold text-yellow-800 mb-1">Motivo del análisis pendiente (obligatorio):</label>
+                                    <textarea class="input-justificacion-pendiente w-full text-xs border border-yellow-300 rounded p-1" rows="2" placeholder="Indique por qué no se realizó el análisis..."></textarea>
                                 </div>
                                 <div id="${uniqueId}" class="hidden mt-2 p-2 bg-red-50 border border-red-200 rounded">
                                     <label class="block text-xs font-bold text-red-700 mb-1">⚠️ Valor fuera de rango. Plan de acción / Observación:</label>
@@ -952,8 +958,10 @@
             const tarjeta = select.closest('.relative');
             const input = tarjeta.querySelector('.input-medida');
             const estado = select.value;
+            const panelPendiente = tarjeta.querySelector('.panel-justificacion-pendiente');
+            if (panelPendiente) panelPendiente.classList.toggle('hidden', estado !== 'Pendiente');
             if (!input.dataset.tipoOriginal) input.dataset.tipoOriginal = input.type;
-            // Un input numérico no admite NA/NC/Pendiente: cambiar temporalmente a texto.
+            // Un input numérico no admite NA/FS/E/NR/Pendiente: cambiar temporalmente a texto.
             if (estado) {
                 input.type = 'text';
                 input.value = estado;
@@ -966,7 +974,7 @@
                 input.readOnly = false;
                 input.disabled = false;
                 if (input.type === 'text' && input.dataset.tipoOriginal === 'number') input.type = 'number';
-                if (['NA', 'NC', 'Pendiente'].includes(input.value)) input.value = '';
+                if (['NA', 'FS', 'E', 'NR', 'Pendiente'].includes(input.value)) input.value = '';
             }
         }
 
@@ -978,6 +986,7 @@
             const inputs = document.querySelectorAll('.input-medida');
             let mediciones = [];
             let camposVacios = [];
+            let pendientesSinJustificacion = [];
 
             for (const inp of inputs) {
                 const zona = inp.dataset.zona;
@@ -987,6 +996,9 @@
                 const estado = tarjeta.querySelector('.input-estado').value;
                 if (!estado && !valor) camposVacios.push(`${zona} -> ${parametro}`);
                 const valorFinal = estado || valor;
+                const justificacion = estado === 'Pendiente'
+                    ? (tarjeta.querySelector('.input-justificacion-pendiente')?.value.trim() || '') : '';
+                if (estado === 'Pendiente' && !justificacion) pendientesSinJustificacion.push(`${zona} -> ${parametro}`);
 
                 const limite = inp.dataset.limite;
                 const frecuencia = inp.dataset.frecuencia;
@@ -1032,10 +1044,14 @@
                     valor: valorFinal,
                     plan_accion: planAccion,
                     estado: estado || 'Resultado',
-                    justificacion: '' 
+                    justificacion: justificacion
                 });
             }
 
+            if (pendientesSinJustificacion.length) {
+                alert('Justifique los análisis pendientes antes de guardar:\n' + pendientesSinJustificacion.join('\n'));
+                return;
+            }
             const errorCaptacion = validarGrupoCaptacion(mediciones);
             if (errorCaptacion) {
                 alert('Fuentes de captación: ' + errorCaptacion);
@@ -1044,7 +1060,7 @@
 
             if (camposVacios.length) {
                 let mensaje = '';
-                if (camposVacios.length) mensaje += `Complete el resultado o seleccione NA, NC o Pendiente en ${camposVacios.length} medición(es):\n${camposVacios.slice(0, 5).join('\n')}\n`;
+                if (camposVacios.length) mensaje += `Complete el resultado o seleccione NA, FS, E, NR o Pendiente en ${camposVacios.length} medición(es):\n${camposVacios.slice(0, 5).join('\n')}\n`;
                 alert(mensaje);
                 return;
             }
