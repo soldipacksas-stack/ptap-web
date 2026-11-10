@@ -256,6 +256,7 @@
         }
         function abrirModalUF() {
             editandoUF=null;
+            document.querySelectorAll('#uf_equipo option[data-uf-temporal], #uf_operador option[data-uf-temporal]').forEach(op => op.remove());
             for(const id of Object.values(camposUF)) { const el=document.getElementById(id);if(el.tagName==='SELECT')el.selectedIndex=0;else el.value=''; }
             document.getElementById('uf_fecha').value=fechaLocalUF();
             document.getElementById('uf_agua_ini').value='0';document.getElementById('uf_agua_fin').value='0';
@@ -265,10 +266,29 @@
         }
         function mostrarModalUF(){document.getElementById('modalUF').classList.remove('hidden');document.getElementById('modalUF').classList.add('flex');}
         function cerrarModalUF(){document.getElementById('modalUF').classList.add('hidden');document.getElementById('modalUF').classList.remove('flex');editandoUF=null;}
+        function asignarValorUF(el, valor) {
+            const texto = valorUF(valor);
+            if (el.tagName !== 'SELECT') { el.value = texto; return; }
+            // Retirar únicamente opciones temporales de ediciones anteriores.
+            el.querySelectorAll('option[data-uf-temporal="1"]').forEach(op => op.remove());
+            const normalizar = v => String(v).trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
+            let opcion = Array.from(el.options).find(op => op.value === texto);
+            if (!opcion && texto.trim()) {
+                opcion = Array.from(el.options).find(op =>
+                    normalizar(op.value) === normalizar(texto) || normalizar(op.textContent) === normalizar(texto));
+            }
+            if (!opcion && texto.trim()) {
+                // Mostrar el valor histórico incluso si ya no está en el catálogo actual.
+                opcion = new Option(texto, texto);
+                opcion.dataset.ufTemporal = '1';
+                el.add(opcion);
+            }
+            el.value = opcion ? opcion.value : '';
+        }
         function modificarSeleccionUF() {
-            const r=registrosUF.find(x=>x.id===seleccionUF);if(!r)return;
+            const r=registrosUF.find(x=>String(x.id)===String(seleccionUF));if(!r)return;
             editandoUF=r.id;
-            for(const [campo,id] of Object.entries(camposUF)) document.getElementById(id).value=valorUF(r[campo]);
+            for(const [campo,id] of Object.entries(camposUF)) asignarValorUF(document.getElementById(id), r[campo]);
             document.getElementById('uf_titulo_modal').textContent='✏️ Modificar Limpieza UF';
             document.getElementById('uf_guardar_btn').textContent='Guardar cambios';
             mostrarModalUF();
