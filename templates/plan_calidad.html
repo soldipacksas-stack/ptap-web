@@ -529,19 +529,38 @@
                         // Agrupar todas las horas visibles de cada fecha (seis si se muestran tres turnos).
                         fechasUnicas.forEach(fecha => {
                             const columnasDia = mapaColumnas.filter(col => col.fecha === fecha);
-                            const valores = [];
+                            const medicionesDia = [];
                             const turnosDia = [...new Set(columnasDia.map(col => col.turno))];
                             for (const turno of turnosDia) {
                                 for (const sub of ['GEN', 'M1', 'M2']) {
-                                    const valor = dictBusqueda[`${item.zona}|${item.parametroLimpio}|${fecha}|${turno}|${sub}`];
-                                    if (valor !== undefined && valor !== null && String(valor).trim() !== '') valores.push(valor);
+                                    const key = `${item.zona}|${item.parametroLimpio}|${fecha}|${turno}|${sub}`;
+                                    const valor = dictBusqueda[key];
+                                    if (valor !== undefined && valor !== null && String(valor).trim() !== '') {
+                                        // No eliminar valores repetidos: cada medición es independiente.
+                                        medicionesDia.push({valor, fuera: dictFuera.has(key)});
+                                    }
                                 }
                             }
                             const programada = turnosDia.some(turno => programacionPorCelda.has(`${item.zona}|${item.parametroLimpio}|${fecha}|${turno}`));
-                            const valor = valores.length ? [...new Set(valores.map(String))].join(' / ') : undefined;
-                            const celda = aparienciaCelda(valor, programada);
-                            if(turnosDia.some(t=>['GEN','M1','M2'].some(sub=>dictFuera.has(`${item.zona}|${item.parametroLimpio}|${fecha}|${t}|${sub}`)))) celda.clase='bg-red-100 text-red-700 font-bold';
-                            filaHTML += `<td colspan="${columnasDia.length}" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${celda.clase}">${celda.texto}</td>`;
+                            if (medicionesDia.length > 1) {
+                                // Mantener exactamente el número de columnas del encabezado.
+                                // Las mediciones independientes ocupan celdas separadas;
+                                // el espacio restante conserva la combinación de la fila.
+                                const cantidad = columnasDia.length;
+                                const visibles = medicionesDia.slice(0, cantidad);
+                                visibles.forEach((medicion, indice) => {
+                                    const celda = aparienciaCelda(medicion.valor, programada);
+                                    if (medicion.fuera) celda.clase = 'bg-red-100 text-red-700 font-bold';
+                                    const restante = cantidad - visibles.length;
+                                    const span = indice === visibles.length - 1 ? 1 + restante : 1;
+                                    filaHTML += `<td${span > 1 ? ` colspan="${span}"` : ''} class="p-1.5 border border-gray-200 text-center font-mono text-xs ${celda.clase}">${celda.texto}</td>`;
+                                });
+                            } else {
+                                const medicion = medicionesDia[0];
+                                const celda = aparienciaCelda(medicion?.valor, programada);
+                                if (medicion?.fuera) celda.clase = 'bg-red-100 text-red-700 font-bold';
+                                filaHTML += `<td colspan="${columnasDia.length}" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${celda.clase}">${celda.texto}</td>`;
+                            }
                         });
                     } else {
                     let skipNextCol = 0;
