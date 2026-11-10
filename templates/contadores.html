@@ -63,7 +63,8 @@
                 <h3 class="font-bold text-[#0b4f2f] mb-3">Consumo de agua por punto de medición</h3>
                 <div class="flex flex-wrap items-end gap-3 text-sm mb-3">
                     <div><label class="block font-bold mb-1">Punto de medición</label><select id="punto_cont" class="border rounded p-2" onchange="pintarGraficaCont()"><option value="todos">Todos los puntos</option></select></div>
-                    <div><label class="block font-bold mb-1">Agrupar por</label><select id="grupo_cont" class="border rounded p-2" onchange="pintarGraficaCont()"><option value="total">Total del período por punto</option><option value="dia">Consumo diario</option></select></div>
+                    <div><label class="block font-bold mb-1">Desde</label><input type="date" id="graf_desde_cont" class="border rounded p-2" onchange="pintarGraficaCont()"></div>
+                     <div><label class="block font-bold mb-1">Hasta</label><input type="date" id="graf_hasta_cont" class="border rounded p-2" onchange="pintarGraficaCont()"></div>
                 </div>
                 <p class="text-xs text-gray-500 mb-2">Consumo = lectura actual menos lectura anterior. Se excluyen niveles de tanques, diferencias negativas y días sin lectura anterior.</p>
                 <div class="relative" style="height:360px"><canvas id="grafica_cont"></canvas></div>
@@ -112,7 +113,7 @@
         const fechaLocalCont=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         const hoyStr=fechaLocalCont();
         let registrosCont=[],seleccionCont=null,editandoCont=null,graficaCont=null;
-        ['form_fecha','filtro_fecha','desde_cont','hasta_cont'].forEach(id=>document.getElementById(id).value=hoyStr);
+        ['form_fecha','filtro_fecha','desde_cont','hasta_cont','graf_desde_cont','graf_hasta_cont'].forEach(id=>document.getElementById(id).value=hoyStr);
 
         const listaMedidores = [
             {nombre: "Medidor principal PTAP", tipo: "lectura"},
@@ -201,6 +202,12 @@
             try{const res=await fetch('/api/contadores/registros');if(!res.ok)throw new Error('HTTP '+res.status);
                 const data=await res.json();registrosCont=Array.isArray(data.data)?data.data:[];
                 if(!registrosCont.some(r=>r.id===seleccionCont))seleccionCont=null;
+                if(registrosCont.length&&!window.rangoGraficaContInicializado){
+                    const fechas=registrosCont.map(diaCont).filter(Boolean).sort();
+                    document.getElementById('graf_desde_cont').value=fechas[0];
+                    document.getElementById('graf_hasta_cont').value=fechas[fechas.length-1];
+                    window.rangoGraficaContInicializado=true;
+                }
                 const sel=document.getElementById('punto_cont'),actual=sel.value;
                 sel.replaceChildren(new Option('Todos los puntos','todos'));
                 const nombres=[...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{})))].filter(n=>!/^nivel\s*%/i.test(n));
@@ -213,17 +220,46 @@
             if(v&&!Array.from(sel.options).some(o=>o.value===v))sel.add(new Option(v+' (registro histórico)',v));
             sel.value=v;
         }
+        // Asociar claves históricas con campos actuales sin perder nombres originales.
+        function normalizarClaveCont(nombre){
+            return String(nombre??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+                .replace(/\bm(?:3|³)\b/g,'').replace(/[^a-z0-9]/g,'');
+        }
+        const aliasCont={
+            'Medidor principal PTAP':['Medidor principal PTAP m3','Medidor principal PTAP M3','Medidor principal PTAP (m³)'],
+            'Medidor by-pass línea cervecera':['Medidor by-pass línea cervecera a servicios','Medidor by-pass línea cervecera a Servicio','Medidor by-pass línea cervecera a Servicios'],
+            'Medidor by-pass Ósmosis Inversa':['Medidor by-pass Osmosis Inversa'],
+            'Medidor by-pass agua doméstica':['Medidor by-pass agua domestica']
+        };
+        function claveLecturaCont(lecturas,nombre){
+            if(Object.prototype.hasOwnProperty.call(lecturas,nombre))return nombre;
+            const claves=Object.keys(lecturas), candidatos=[nombre,...(aliasCont[nombre]||[])];
+            for(const candidato of candidatos){
+                const k=claves.find(x=>normalizarClaveCont(x)===normalizarClaveCont(candidato));
+                if(k!==undefined)return k;
+            }
+            // Evitar asignar automáticamente valores de medidores distintos.
+            return null;
+        }
+        let clavesEditadasCont=new Map(),lecturasOriginalesCont={};
         function modificarContador(){
             const r=registrosCont.find(x=>x.id===seleccionCont);if(!r)return;
             editandoCont=r.id;construirFormularioMedidores();
+            lecturasOriginalesCont={...(r.lecturas||{})};clavesEditadasCont=new Map();
             document.getElementById('form_fecha').value=diaCont(r);seleccionarOperadorCont(r.operador);
-            document.querySelectorAll('.input-medidor').forEach(inp=>{const v=r.lecturas?.[inp.dataset.nombre];inp.value=v==null?'':v;});
+            const faltantes=[];
+            document.querySelectorAll('.input-medidor').forEach(inp=>{
+                const clave=claveLecturaCont(lecturasOriginalesCont,inp.dataset.nombre);
+                if(clave!==null){inp.value=lecturasOriginalesCont[clave]??'';clavesEditadasCont.set(inp.dataset.nombre,clave);}
+                else{inp.value='';faltantes.push(inp.dataset.nombre);}
+            });
             document.getElementById('titulo_modal_cont').textContent='✏️ Modificar registro de contadores 24h';
             document.getElementById('guardar_cont').textContent='Guardar cambios';mostrarModalCont();
+            if(faltantes.length)console.warn('Lecturas sin coincidencia de clave:',faltantes);
         }
         function consumosCont(){
             const orden=[...registrosCont].sort((a,b)=>diaCont(a).localeCompare(diaCont(b)));
-            const [desde,hasta]=limitesCont(),salida=[];
+            const desde=document.getElementById('graf_desde_cont').value,hasta=document.getElementById('graf_hasta_cont').value,salida=[];
             for(let i=1;i<orden.length;i++){
                 const prev=orden[i-1],act=orden[i],fecha=diaCont(act);
                 if(fecha<desde||fecha>hasta||fecha===diaCont(prev))continue;
@@ -241,19 +277,25 @@
         }
         function pintarGraficaCont(){
             const canvas=document.getElementById('grafica_cont');if(!canvas||typeof Chart==='undefined'){document.getElementById('nota_grafica_cont').textContent='No se pudo cargar el motor de gráficas.';return;}
-            const punto=document.getElementById('punto_cont').value,grupo=document.getElementById('grupo_cont').value;
+            const punto=document.getElementById('punto_cont').value;
+            const desde=document.getElementById('graf_desde_cont').value,hasta=document.getElementById('graf_hasta_cont').value;
+            if(!desde||!hasta||desde>hasta){document.getElementById('nota_grafica_cont').textContent='Seleccione un rango de fechas válido para la gráfica.';if(graficaCont){graficaCont.destroy();graficaCont=null;}return;}
             const datos=consumosCont().filter(x=>punto==='todos'||x.punto===punto);
-            const sumas=new Map();for(const d of datos){const k=grupo==='dia'?d.fecha+' | '+d.punto:d.punto;sumas.set(k,(sumas.get(k)||0)+d.consumo);}
+            const sumas=new Map();for(const d of datos){const k=d.punto;sumas.set(k,(sumas.get(k)||0)+d.consumo);}
             const etiquetas=[...sumas.keys()],valores=[...sumas.values()];
             if(graficaCont)graficaCont.destroy();
             graficaCont=new Chart(canvas,{type:'bar',data:{labels:etiquetas,datasets:[{label:'Consumo de agua (m³)',data:valores,backgroundColor:'#25846A',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Consumo (m³)'}},x:{ticks:{autoSkip:false,maxRotation:65,minRotation:0}}}}});
             document.getElementById('nota_grafica_cont').textContent=datos.length?`${datos.length} diferencias diarias válidas utilizadas.`:'No hay lecturas consecutivas suficientes para calcular consumos en este período.';
         }
         async function enviarRegistroContadores(){
-            const lecturas={};let valido=true;
-            document.querySelectorAll('.input-medidor').forEach(inp=>{if(inp.value.trim()===''||!Number.isFinite(Number(inp.value))){valido=false;return;}lecturas[inp.dataset.nombre]=Number(inp.value);});
+            const lecturas=editandoCont==null?{}:{...lecturasOriginalesCont};let valido=true;
+            document.querySelectorAll('.input-medidor').forEach(inp=>{
+                const nombre=inp.dataset.nombre,clave=editandoCont==null?nombre:(clavesEditadasCont.get(nombre)||nombre);
+                if(inp.value.trim()===''){if(editandoCont!=null&&!clavesEditadasCont.has(nombre))return;valido=false;return;}
+                if(!Number.isFinite(Number(inp.value))){valido=false;return;}lecturas[clave]=Number(inp.value);
+            });
             const payload={fecha:document.getElementById('form_fecha').value,operador:document.getElementById('form_operador').value,lecturas};
-            if(!valido||!payload.fecha||!payload.operador){alert('Complete todas las lecturas, fecha y operador.');return;}
+            if(!valido||!payload.fecha||!payload.operador){alert('Revise las lecturas, la fecha y el operador antes de guardar.');return;}
             const id=editandoCont,btn=document.getElementById('guardar_cont');btn.disabled=true;
             try{
                 const url=id==null?'/api/contadores/guardar':'/api/contadores/actualizar/'+encodeURIComponent(id);
