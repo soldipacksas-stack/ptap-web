@@ -2,6 +2,7 @@
 (function () {
 'use strict';
 let modoEdicion=false;
+let idsEdicion=new Map();
 const $=id=>document.getElementById(id);
 const key=(z,p)=>JSON.stringify([z,p]);
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -29,10 +30,10 @@ function decorate(){
 const oldRender=window.renderizarCamposDinamicos;
 window.renderizarCamposDinamicos=async function(){await oldRender();decorate();};
 const oldAbrir=window.abrirModalFormulario;
-window.abrirModalFormulario=function(){modoEdicion=false;oldAbrir();$('modalForm').querySelector('h3').textContent='📝 Registrar Mediciones Plan de Calidad';};
+window.abrirModalFormulario=function(){modoEdicion=false;idsEdicion.clear();oldAbrir();$('modalForm').querySelector('h3').textContent='📝 Registrar Mediciones Plan de Calidad';};
 function itemData(inp){
  const estado=stateOf(inp),card=inp.closest('.relative');
- return {zona:inp.dataset.zona,parametro:inp.dataset.param,valor:estado==='Resultado'?inp.value.trim():estado,estado,
+ return {id:modoEdicion?(idsEdicion.get(key(inp.dataset.zona,inp.dataset.param))??null):null,zona:inp.dataset.zona,parametro:inp.dataset.param,valor:estado==='Resultado'?inp.value.trim():estado,estado,
  justificacion:estado==='Resultado'?'':(card?.querySelector('.pc-justificacion')?.value.trim()||''),
  plan_accion:card?.querySelector('.input-plan-accion')?.value.trim()||inp.dataset.pcPlan||''};
 }
@@ -70,12 +71,33 @@ async function cargarEdicion(){
  try{
  const data=await json(await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${encodeURIComponent(turno)}`));
  const rows=data.data||[];if(!rows.length){alert('No hay registros en esa fecha y turno.');return;}
+ // Resolver la identidad de cada medición ANTES de abrir el formulario.
+ // Si hay varias lecturas históricas, exigir elección explícita del ID.
+ const grupos=new Map();
+ for(const r of rows){const k=key(r.zona,r.parametro);if(!grupos.has(k))grupos.set(k,[]);grupos.get(k).push(r);}
+ const seleccion=new Map();
+ const ambiguos=[...grupos.entries()].filter(([,rs])=>rs.length>1);
+ for(const [k,rs] of ambiguos){
+   const descripcion=rs.map(r=>`ID ${r.id}: valor ${r.valor} · operador ${r.operador||'sin identificar'}`).join('\n');
+   const respuesta=prompt(`Se encontraron ${rs.length} registros históricos para ${rs[0].zona} / ${rs[0].parametro}.\n\n${descripcion}\n\nEscriba el ID exacto que desea editar. El otro registro se conservará sin cambios.\nCancelar evita abrir la edición.`);
+   if(respuesta===null)return;
+   if(!/^\d+$/.test(respuesta.trim())||!rs.some(r=>r.id===Number(respuesta.trim()))){alert('ID no válido. No se modificó ningún registro.');return;}
+   seleccion.set(k,rs.find(r=>r.id===Number(respuesta.trim())));
+ }
+ for(const [k,rs] of grupos)if(rs.length===1)seleccion.set(k,rs[0]);
  $('form_fecha').value=fecha;$('form_turno').value=turno;
  $('modalForm').classList.remove('hidden');$('modalForm').classList.add('flex');
  await window.renderizarCamposDinamicos();
- const map=new Map(rows.map(r=>[key(r.zona,r.parametro),r]));
- for(const inp of fieldRows()){
- const r=map.get(key(inp.dataset.zona,inp.dataset.param));if(!r)continue;
+ const campos=fieldRows();
+ const faltantes=campos.filter(inp=>!seleccion.has(key(inp.dataset.zona,inp.dataset.param)));
+ if(faltantes.length){
+   $('modalForm').classList.add('hidden');$('modalForm').classList.remove('flex');
+   alert('El turno contiene muestras programadas sin registro histórico. No se puede editar el lote sin conciliación.');return;
+ }
+ idsEdicion.clear();
+ for(const inp of campos){
+ const k=key(inp.dataset.zona,inp.dataset.param),r=seleccion.get(k);
+ idsEdicion.set(k,r.id);
  setState(inp,['NA','NC','Pendiente'].includes(r.estado)?r.estado:(['NA','NC','Pendiente'].includes(r.valor)?r.valor:'Resultado'));
  if(stateOf(inp)==='Resultado')inp.value=r.valor||'';
  else {const just=inp.closest('.relative')?.querySelector('.pc-justificacion');if(just)just.value=r.justificacion||'';}
@@ -86,7 +108,7 @@ async function cargarEdicion(){
  }catch(e){alert('No se pudo cargar la edición: '+e.message);}
 }
 const oldCerrar=window.cerrarModalFormulario;
-window.cerrarModalFormulario=function(){oldCerrar();$('form_fecha').disabled=false;$('form_turno').disabled=false;modoEdicion=false;};
+window.cerrarModalFormulario=function(){oldCerrar();$('form_fecha').disabled=false;$('form_turno').disabled=false;modoEdicion=false;idsEdicion.clear();};
 async function eliminar(){
  const fecha=$('f_desde').value,turno=$('f_turno').value;
  if(!fecha||fecha!==$('f_hasta').value||!['Turno 1','Turno 2','Turno 3'].includes(turno)){alert('Seleccione una sola fecha y un turno específico.');return;}
