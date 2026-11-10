@@ -34,7 +34,16 @@
 
             <!-- Tabla de Registros -->
             <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex-1">
-                <div class="overflow-x-auto">
+                <div class="p-4 flex flex-wrap items-end gap-3 text-sm border-b">
+                    <div><label class="block font-semibold mb-1">Consultar por</label><select id="pa_periodo" onchange="paCambiarPeriodo()" class="border rounded p-2"><option value="ultimos7">Últimos 7 días</option><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="rango">Entre fechas</option></select></div>
+                    <div id="pa_fecha_wrap"><label class="block font-semibold mb-1">Fecha de referencia</label><input type="date" id="pa_fecha" class="border rounded p-2"></div>
+                    <div id="pa_desde_wrap" class="hidden"><label class="block font-semibold mb-1">Desde</label><input type="date" id="pa_desde" class="border rounded p-2"></div>
+                    <div id="pa_hasta_wrap" class="hidden"><label class="block font-semibold mb-1">Hasta</label><input type="date" id="pa_hasta" class="border rounded p-2"></div>
+                    <button onclick="paPintar()" class="bg-[#0b4f2f] text-white rounded px-4 py-2">Consultar</button>
+                    <button id="pa_modificar" onclick="paModificar()" disabled class="bg-amber-600 disabled:opacity-40 text-white rounded px-4 py-2">Modificar registro</button>
+                </div>
+                <p id="pa_resumen" class="px-4 pt-2 text-xs text-gray-500" aria-live="polite"></p>
+                <div class="overflow-x-auto max-h-[65vh]">
                     <table class="w-full text-left text-xs border-collapse">
                         <thead class="bg-[#0b4f2f] text-white uppercase font-semibold">
                             <tr>
@@ -55,37 +64,32 @@
         </main>
     </div>
 
+    <div id="pa_modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl overflow-hidden">
+        <div class="bg-[#0b4f2f] text-white p-4 flex justify-between"><h3 class="font-bold">Modificar plan de acción</h3><button onclick="paCerrar()" aria-label="Cerrar">✕</button></div>
+        <div class="p-5 space-y-3 text-sm">
+          <p id="pa_detalle" class="text-gray-600"></p>
+          <label class="block font-semibold" for="pa_descripcion">Plan de acción realizado</label>
+          <textarea id="pa_descripcion" rows="5" class="w-full border rounded p-2"></textarea>
+          <p class="text-xs text-gray-500">El resultado, límite y origen de la desviación no se modifican aquí.</p>
+        </div>
+        <div class="bg-gray-50 border-t p-4 flex justify-end gap-2"><button onclick="paCerrar()" class="bg-gray-400 text-white px-4 py-2 rounded">Cancelar</button><button id="pa_guardar" onclick="paGuardar()" class="bg-[#17803d] text-white px-4 py-2 rounded">Guardar cambios</button></div>
+      </div>
+    </div>
     <script>
-        async function cargarPlanesAccion() {
-            try {
-                const res = await fetch('/api/planes-accion/registros');
-                const data = await res.json();
-                const tbody = document.getElementById('tabla-planes-accion');
-                
-                if (!data.data || data.data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-gray-500 italic">No hay planes de acción registrados.</td></tr>`;
-                    return;
-                }
-
-                tbody.innerHTML = '';
-                data.data.forEach(r => {
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-gray-50">
-                            <td class="p-3 border font-mono">${r.fecha}<br><span class="text-gray-500 text-[10px]">${r.turno}</span></td>
-                            <td class="p-3 border font-semibold text-[#0b4f2f]">${r.modulo}</td>
-                            <td class="p-3 border">${r.zona}<br><span class="font-medium text-gray-700">${r.parametro}</span></td>
-                            <td class="p-3 border font-mono"><span class="text-red-600 font-bold">${r.valor_registrado}</span><br><span class="text-gray-500 text-[10px]">Esp: ${r.limite_esperado}</span></td>
-                            <td class="p-3 border text-gray-800">${r.descripcion_accion}</td>
-                            <td class="p-3 border text-xs text-gray-600">${r.operador}</td>
-                        </tr>
-                    `;
-                });
-            } catch (err) {
-                console.error("Error cargando planes de acción:", err);
-            }
-        }
-
-        window.onload = cargarPlanesAccion;
+      const paHoy=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      let paRegistros=[],paSeleccion=null,paEditando=null;
+      ['pa_fecha','pa_desde','pa_hasta'].forEach(id=>document.getElementById(id).value=paHoy());
+      function paCambiarPeriodo(){const m=document.getElementById('pa_periodo').value;document.getElementById('pa_fecha_wrap').classList.toggle('hidden',m==='rango'||m==='ultimos7');document.getElementById('pa_desde_wrap').classList.toggle('hidden',m!=='rango');document.getElementById('pa_hasta_wrap').classList.toggle('hidden',m!=='rango');paPintar();}
+      function paLimites(){const m=document.getElementById('pa_periodo').value,f=document.getElementById('pa_fecha').value;if(m==='rango')return [document.getElementById('pa_desde').value,document.getElementById('pa_hasta').value];if(m==='ultimos7'){const d=new Date();d.setDate(d.getDate()-6);return [paHoy(d),paHoy()];}if(!f)return ['',''];if(m==='dia')return [f,f];const [y,mo,day]=f.split('-').map(Number);if(m==='mes')return [`${y}-${String(mo).padStart(2,'0')}-01`,paHoy(new Date(y,mo,0))];const d=new Date(y,mo-1,day),lunes=new Date(d);lunes.setDate(d.getDate()-(d.getDay()+6)%7);const domingo=new Date(lunes);domingo.setDate(lunes.getDate()+6);return [paHoy(lunes),paHoy(domingo)];}
+      const paTexto=v=>v==null?'':String(v);
+      function paCelda(tr,a,b,clase=''){const td=document.createElement('td');td.className='p-3 border '+clase;td.append(document.createTextNode(paTexto(a)));if(b!=null&&b!==''){td.append(document.createElement('br'));const sp=document.createElement('span');sp.className='text-gray-500 text-[10px]';sp.textContent=paTexto(b);td.append(sp);}tr.append(td);}
+      function paPintar(){const tbody=document.getElementById('tabla-planes-accion'),[desde,hasta]=paLimites();tbody.replaceChildren();if(!desde||!hasta||desde>hasta){document.getElementById('pa_resumen').textContent='Seleccione fechas válidas.';document.getElementById('pa_modificar').disabled=true;return;}const filtrados=paRegistros.filter(r=>{const f=paTexto(r.fecha).slice(0,10);return f>=desde&&f<=hasta;});for(const r of filtrados){const tr=document.createElement('tr');tr.className='cursor-pointer hover:bg-green-50 '+(paSeleccion===r?'bg-green-100':'');tr.tabIndex=0;tr.onclick=()=>{paSeleccion=r;paPintar();};tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();paSeleccion=r;paPintar();}};paCelda(tr,r.fecha,r.turno,'font-mono');paCelda(tr,r.modulo,null,'font-semibold text-[#0b4f2f]');paCelda(tr,r.zona,r.parametro);paCelda(tr,r.valor_registrado,'Esp: '+paTexto(r.limite_esperado),'font-mono');paCelda(tr,r.descripcion_accion);paCelda(tr,r.operador);tbody.append(tr);}if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=6;td.className='p-6 text-center text-gray-500 italic';td.textContent='No hay planes de acción en el período seleccionado.';tr.append(td);tbody.append(tr);}document.getElementById('pa_modificar').disabled=!filtrados.includes(paSeleccion)||paSeleccion?.id==null;document.getElementById('pa_resumen').textContent=`${filtrados.length} registro(s) del ${desde} al ${hasta}. Seleccione una fila para modificar.`;}
+      async function cargarPlanesAccion(){try{const res=await fetch('/api/planes-accion/registros');if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();paRegistros=Array.isArray(data.data)?data.data:[];paSeleccion=null;paPintar();}catch(e){document.getElementById('pa_resumen').textContent='No se pudieron cargar los planes: '+e.message;}}
+      function paModificar(){if(!paSeleccion||paSeleccion.id==null)return;paEditando=paSeleccion;document.getElementById('pa_detalle').textContent=[paEditando.fecha,paEditando.turno,paEditando.modulo,paEditando.zona,paEditando.parametro].filter(Boolean).join(' · ');document.getElementById('pa_descripcion').value=paTexto(paEditando.descripcion_accion);document.getElementById('pa_modal').classList.remove('hidden');document.getElementById('pa_modal').classList.add('flex');}
+      function paCerrar(){document.getElementById('pa_modal').classList.add('hidden');document.getElementById('pa_modal').classList.remove('flex');paEditando=null;}
+      async function paGuardar(){if(!paEditando)return;const descripcion=document.getElementById('pa_descripcion').value.trim();if(!descripcion){alert('Ingrese la descripción del plan de acción.');return;}const btn=document.getElementById('pa_guardar');btn.disabled=true;try{const res=await fetch('/api/planes-accion/actualizar/'+encodeURIComponent(paEditando.id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({descripcion_accion:descripcion})});if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(typeof err.detail==='string'?err.detail:'HTTP '+res.status);}paCerrar();await cargarPlanesAccion();alert('Plan de acción actualizado.');}catch(e){alert('No se guardaron los cambios: '+e.message+'\nLa ruta de actualización debe estar implementada en el servidor.');}finally{btn.disabled=false;}}
+      paCambiarPeriodo();cargarPlanesAccion();
     </script>
 <script>(function(){
  const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
