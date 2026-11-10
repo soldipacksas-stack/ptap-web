@@ -151,7 +151,6 @@ def validar_item(item,p):
     if estado not in ('Resultado','NA','NC','Pendiente'):
         raise HTTPException(422,'Estado inválido')
     if estado != 'Resultado':
-        if not item.justificacion.strip(): raise HTTPException(422,f'Justificación obligatoria: {p.zona} / {p.parametro}')
         if (item.valor or '').strip() not in ('', estado, 'N/A' if estado == 'NA' else estado):
             raise HTTPException(422,f'Valor incompatible con {estado}')
         return estado
