@@ -142,14 +142,16 @@ def estado_efectivo(item):
     """Compatibilidad con formularios que envían el estado en valor."""
     estado = (item.estado or 'Resultado').strip()
     valor = (item.valor or '').strip()
-    if estado == 'Resultado' and valor.upper() in ('NA', 'NC', 'PENDIENTE', 'N/A'):
-        return {'NA':'NA', 'NC':'NC', 'PENDIENTE':'Pendiente', 'N/A':'NA'}[valor.upper()]
+    if estado == 'Resultado' and valor.upper() in ('NA', 'NC', 'FS', 'E', 'NR', 'PENDIENTE', 'N/A'):
+        return {'NA':'NA', 'NC':'NC', 'PENDIENTE':'Pendiente', 'N/A':'NA', 'FS':'FS', 'E':'E', 'NR':'NR'}[valor.upper()]
     return estado
 
 def validar_item(item,p):
     estado = estado_efectivo(item)
-    if estado not in ('Resultado','NA','NC','Pendiente'):
+    if estado not in ('Resultado','NA','NC','FS','E','NR','Pendiente'):
         raise HTTPException(422,'Estado inválido')
+    if estado == 'Pendiente' and not item.justificacion.strip():
+        raise HTTPException(422, f'Justificación obligatoria para Pendiente: {p.zona} / {p.parametro}')
     if estado != 'Resultado':
         if (item.valor or '').strip() not in ('', estado, 'N/A' if estado == 'NA' else estado):
             raise HTTPException(422,f'Valor incompatible con {estado}')
@@ -164,7 +166,7 @@ def validar_item(item,p):
 def serial(r, estado=None):
     return {'id':r.id,'fecha':r.fecha,'turno':r.turno,'operador':r.operador,'zona':r.zona,
             'parametro':r.parametro,'valor':r.valor,'resultado':r.resultado,'limite':r.limite,
-            'estado':estado.estado if estado else (r.valor if r.valor in ('N/A','NA','NC','Pendiente') else 'Resultado'),
+            'estado':estado.estado if estado else (r.valor if r.valor in ('N/A','NA','NC','FS','E','NR','Pendiente') else 'Resultado'),
             'justificacion':estado.justificacion if estado else ''}
 
 @router.get('/api/plan-calidad/maestra')
@@ -197,6 +199,29 @@ def validar_lote(payload,db,editar=False):
     if set(recibidos)!=set(oblig):
         faltan=set(oblig)-set(recibidos);sobran=set(recibidos)-set(oblig)
         raise HTTPException(422,f'Programación no coincide. Faltan: {list(faltan)[:4]}; no programados: {list(sobran)[:4]}')
+    # Las cuatro fuentes de captación forman un único conjunto por turno.
+    fuentes = [(key, item) for key, item in recibidos.items()
+               if key[0].strip().casefold() == 'entrada agua potable'
+               and key[1].strip().casefold() in ('agua fuente (pozo 1)', 'agua fuente (pozo 2)',
+                   'agua fuente (pozo 3)', 'agua fuente (río)', 'agua fuente (rio)')]
+    if fuentes:
+        if len(fuentes) != 4:
+            raise HTTPException(422, 'Se requieren las cuatro fuentes de captación')
+        activos = []
+        for _, item in fuentes:
+            if estado_efectivo(item) == 'NA':
+                continue
+            if estado_efectivo(item) != 'Resultado':
+                raise HTTPException(422, 'Las fuentes de captación solo admiten porcentaje o NA')
+            n = normal_num(item.valor)
+            if n == 0:
+                item.estado = 'NA'; item.valor = 'NA'
+            elif 0 < n <= 100:
+                activos.append(n)
+            else:
+                raise HTTPException(422, 'Los porcentajes de captación deben ser mayores que cero y hasta 100')
+        if len(activos) != 3 or abs(sum(activos)-100) > 0.000001:
+            raise HTTPException(422, 'Deben existir tres fuentes activas que sumen 100 % y una fuente NA')
     evaluados={key:validar_item(item,oblig[key]) for key,item in recibidos.items()}
     return v,oblig,recibidos,evaluados
 

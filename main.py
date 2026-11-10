@@ -1121,6 +1121,7 @@ def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
     ids = [r.id for r in registros]
     estados = {s.registro_id:s.estado for s in db.query(pc.Estado).filter(pc.Estado.registro_id.in_(ids)).all()} if ids else {}
     tot = dict(programados=0,realizados=0,pendientes=0,na=0,sin_registrar=0,fuera_rango=0,conformes=0,duplicados=0)
+    alertas=[]
     dias=[]; d=a
     while d<=b:
         fecha=d.isoformat()
@@ -1142,14 +1143,20 @@ def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
                 estado=estados.get(r.id)
                 if not estado:
                     v=(r.valor or '').strip().upper()
-                    estado='Pendiente' if v=='PENDIENTE' else ('NA' if v in ('NA','N/A','NC') else 'Resultado' if v else 'Sin registrar')
+                    estado='Pendiente' if v=='PENDIENTE' else (v if v in ('NA','N/A','NC','FS','E','NR') else 'Resultado' if v else 'Sin registrar')
                 if estado=='Resultado':
                     c['realizados']+=1
                     res=(r.resultado or '').strip().casefold()
-                    if res in ('fuera de rango','no cumple'):c['fuera_rango']+=1
+                    if res in ('fuera de rango','no cumple'):
+                        c['fuera_rango']+=1
+                        alertas.append({'id':r.id,'fecha':r.fecha,'turno':r.turno,'zona':r.zona,'parametro':r.parametro,'valor':r.valor,'limite':r.limite})
                     elif res=='cumple':c['conformes']+=1
                 elif estado=='Pendiente':c['pendientes']+=1
-                elif estado in ('NA','NC'):c['na']+=1
+                elif estado in ('NA','NC','FS','E','NR'):
+                    if estado in ('NA','NC') and p.zona.strip().casefold() == 'entrada agua potable' and p.parametro.strip().casefold().startswith('agua fuente ('):
+                        c['programados']-=1  # Fuente excluida: no entra en el denominador
+                    elif estado in ('NA','NC'):c['na']+=1
+                    else:c['na']+=1
                 else:c['sin_registrar']+=1
         for k in tot:tot[k]+=c[k]
         dias.append({'fecha':fecha,**c})
@@ -1158,5 +1165,5 @@ def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
     evaluados=tot['conformes']+tot['fuera_rango']
     tot['calidad']=round(100*tot['conformes']/evaluados,1) if evaluados else None
     tot['documental']=round(100*(tot['realizados']+tot['pendientes']+tot['na'])/tot['programados'],1) if tot['programados'] else None
-    return {'desde':desde,'hasta':hasta,'total':tot,'dias':dias,
+    return {'desde':desde,'hasta':hasta,'total':tot,'dias':dias,'alertas':sorted(alertas,key=lambda x:(x['fecha'],x['id']),reverse=True),
             'zonas_disponibles':sorted({p.zona for p in db.query(pc.Parametro).all()})}
