@@ -11,12 +11,12 @@ function fieldRows(){return [...document.querySelectorAll('#contenedor-parametro
 function stateOf(inp){return inp.closest('.relative')?.querySelector('.input-estado')?.value||'Resultado';}
 function setState(inp,estado){const sel=inp.closest('.relative')?.querySelector('.input-estado');if(!sel)return;sel.value=estado==='Resultado'?'':estado;refreshState(sel);}
 function refreshState(sel){
- const card=sel.closest('.relative'),inp=card?.querySelector('.input-medida'),just=card?.querySelector('.pc-justificacion');
+ const card=sel.closest('.relative'),inp=card?.querySelector('.input-medida'),just=(card?.querySelector('.input-justificacion-pendiente')||card?.querySelector('.pc-justificacion'));
  if(!inp)return;
  const estado=sel.value;
  if(estado){if(inp.tagName==='INPUT')inp.type='text';inp.value=estado;inp.readOnly=true;}
- else {if(inp.tagName==='INPUT')inp.type=inp.dataset.originalType||'number';if(['NA','NC','Pendiente'].includes(inp.value))inp.value='';inp.readOnly=false;}
- if(just){just.classList.toggle('hidden',!estado);just.required=!!estado;}
+ else {if(inp.tagName==='INPUT')inp.type=inp.dataset.originalType||'number';if(['NA','NC','FS','E','NR','Pendiente'].includes(inp.value))inp.value='';inp.readOnly=false;}
+ if(just){just.classList.toggle('hidden',estado!=='Pendiente');just.required=estado==='Pendiente';}
  const plan=document.getElementById(inp.dataset.containerId);if(estado&&plan)plan.classList.add('hidden');
 }
 function decorate(){
@@ -25,6 +25,7 @@ function decorate(){
   if(inp.tagName==='INPUT')inp.dataset.originalType=inp.type;
   sel.onchange=()=>refreshState(sel);
   inp.addEventListener('input',()=>{if(!sel.value&&inp.value)try{validarCasillaMedicion(inp)}catch(_){}});
+  inp.addEventListener('change',()=>{if(!sel.value && typeof esFuenteCaptacion==='function' && esFuenteCaptacion(inp.dataset.zona,inp.dataset.param) && Number(inp.value)===0)setState(inp,'NA');});
  }
 }
 const oldRender=window.renderizarCamposDinamicos;
@@ -34,12 +35,13 @@ window.abrirModalFormulario=function(){modoEdicion=false;idsEdicion.clear();oldA
 function itemData(inp){
  const estado=stateOf(inp),card=inp.closest('.relative');
  return {id:modoEdicion?(idsEdicion.get(key(inp.dataset.zona,inp.dataset.param))??null):null,zona:inp.dataset.zona,parametro:inp.dataset.param,valor:estado==='Resultado'?inp.value.trim():estado,estado,
- justificacion:estado==='Resultado'?'':(card?.querySelector('.pc-justificacion')?.value.trim()||''),
+ justificacion:estado==='Resultado'?'':((card?.querySelector('.input-justificacion-pendiente')||card?.querySelector('.pc-justificacion'))?.value.trim()||''),
  plan_accion:card?.querySelector('.input-plan-accion')?.value.trim()||inp.dataset.pcPlan||''};
 }
 window.enviarFormulario=async function(){
  const items=fieldRows().map(itemData);
  if(!items.length){alert('No hay parámetros programados para guardar.');return;}
+ const errorFuentes=typeof validarGrupoCaptacion==='function'?validarGrupoCaptacion(items):null;if(errorFuentes){alert(errorFuentes);return;}
  for(const item of items){if(item.estado==='Resultado'&&!item.valor){alert('Falta resultado: '+item.zona+' / '+item.parametro);return;}
  }
  if(items.some(i=>i.estado==='Pendiente')&&!confirm('Hay análisis pendientes. ¿Desea guardar el turno?'))return;
@@ -65,12 +67,13 @@ window.enviarFormulario=async function(){
  }catch(e){alert('No se guardaron los cambios: '+e.message);}
 };
 async function cargarEdicion(){
- const fecha=$('f_desde').value,turno=$('f_turno').value;
+ const query=new URLSearchParams(location.search);
+ const fecha=query.get('fecha')||$('f_desde').value,turno=query.get('turno')||$('f_turno').value;
  if(!fecha||!['Turno 1','Turno 2','Turno 3'].includes(turno)){alert('Seleccione una fecha y un turno específico en los filtros.');return;}
- if($('f_hasta').value!==fecha){alert('Para modificar, seleccione la misma fecha en Desde y Hasta.');return;}
+ if(!query.get('fecha') && $('f_hasta').value!==fecha){alert('Para modificar, seleccione la misma fecha en Desde y Hasta.');return;}
  try{
  const data=await json(await fetch(`/api/plan-calidad/registros?f_desde=${fecha}&f_hasta=${fecha}&turno=${encodeURIComponent(turno)}`));
- const rows=data.data||[];if(!rows.length){alert('No hay registros en esa fecha y turno.');return;}
+ const rows=data.data||[];if(query.get('registro') && !rows.some(r=>String(r.id)===query.get('registro'))){alert('No se encontró el registro seleccionado.');return;}if(!rows.length){alert('No hay registros en esa fecha y turno.');return;}
  // Resolver la identidad de cada medición ANTES de abrir el formulario.
  // Si hay varias lecturas históricas, exigir elección explícita del ID.
  const grupos=new Map();
@@ -98,7 +101,7 @@ async function cargarEdicion(){
  for(const inp of campos){
  const k=key(inp.dataset.zona,inp.dataset.param),r=seleccion.get(k);
  idsEdicion.set(k,r.id);
- setState(inp,['NA','NC','Pendiente'].includes(r.estado)?r.estado:(['NA','NC','Pendiente'].includes(r.valor)?r.valor:'Resultado'));
+ setState(inp,['NA','NC','FS','E','NR','Pendiente'].includes(r.estado)?r.estado:(['NA','NC','FS','E','NR','Pendiente'].includes(r.valor)?r.valor:'Resultado'));
  if(stateOf(inp)==='Resultado')inp.value=r.valor||'';
  else {const just=inp.closest('.relative')?.querySelector('.pc-justificacion');if(just)just.value=r.justificacion||'';}
  }
@@ -135,4 +138,13 @@ function toolbar(){
 const oldCargar=window.cargarTablaRegistros;
 window.cargarTablaRegistros=async function(){await oldCargar();};
 toolbar();
+// Enlaces profundos desde el Dashboard: fecha, turno e ID exacto.
+const enlace=new URLSearchParams(location.search);
+if(enlace.has('fecha')&&enlace.has('turno')){
+ const fecha=enlace.get('fecha'),turno=enlace.get('turno');
+ if(/^\d{4}-\d{2}-\d{2}$/.test(fecha)&&['Turno 1','Turno 2','Turno 3'].includes(turno)){
+  $('f_desde').value=fecha;$('f_hasta').value=fecha;$('f_turno').value=turno;
+  window.addEventListener('load',()=>{cargarTablaRegistros();if(enlace.has('registro'))setTimeout(()=>cargarEdicion(),450);});
+ }
+}
 })();

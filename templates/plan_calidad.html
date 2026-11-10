@@ -63,7 +63,7 @@
         <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg flex-shrink-0">
             <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
             <nav class="space-y-2 font-medium text-sm">
-                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▥ Dashboard Gerencial</a>
+                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▥ Dashboard General</a>
                 <a href="/plan-calidad" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Plan de Calidad</a>
                 <a href="/contadores" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Contadores 24h</a>
                 <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
@@ -419,6 +419,7 @@
                 headEl.innerHTML = htmlNivel1 + htmlNivel2 + htmlNivel3;
 
                 let dictBusqueda = {};
+                let dictFuera = new Set();
                 let tieneMuestrasMultiples = new Set();
 
                 registrosBD.forEach(r => {
@@ -433,6 +434,7 @@
                     let subKey = esM1 ? 'M1' : (esM2 ? 'M2' : 'GEN');
                     const key = `${r.zona}|${paramLimpio}|${r.fecha}|${r.turno}|${subKey}`;
                     dictBusqueda[key] = r.valor;
+                    if (String(r.resultado||'').toLowerCase() === 'fuera de rango' || String(r.resultado||'').toLowerCase() === 'no cumple') dictFuera.add(key);
                 });
 
                 let listaFilasUnicas = [];
@@ -538,6 +540,7 @@
                             const programada = turnosDia.some(turno => programacionPorCelda.has(`${item.zona}|${item.parametroLimpio}|${fecha}|${turno}`));
                             const valor = valores.length ? [...new Set(valores.map(String))].join(' / ') : undefined;
                             const celda = aparienciaCelda(valor, programada);
+                            if(turnosDia.some(t=>['GEN','M1','M2'].some(sub=>dictFuera.has(`${item.zona}|${item.parametroLimpio}|${fecha}|${t}|${sub}`)))) celda.clase='bg-red-100 text-red-700 font-bold';
                             filaHTML += `<td colspan="${columnasDia.length}" class="p-1.5 border border-gray-200 text-center font-mono text-xs ${celda.clase}">${celda.texto}</td>`;
                         });
                     } else {
@@ -583,6 +586,7 @@
 
                         if (tieneResultado) {
                             estilo = 'font-semibold text-gray-900';
+                            if(dictFuera.has(`${item.zona}|${item.parametroLimpio}|${col.fecha}|${col.turno}|${esDoble?(esPrimeraHora?'M1':'M2'):'GEN'}`)) estilo='bg-red-100 text-red-700 font-bold';
                             if (displayTexto === 'FUERA DE RANGO' || displayTexto === 'No pasa' || displayTexto === 'No cumple') {
                                 estilo = 'bg-red-100 text-red-700 font-bold';
                             }
@@ -1099,7 +1103,7 @@
         };
     </script>
 <script>(function(){
- const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
+ const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard General</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
  const path=location.pathname;
  nav.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('ptap-selected')});
  const side=document.querySelector('aside');
