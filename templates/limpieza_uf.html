@@ -37,6 +37,16 @@
             <!-- Panel de Historial / Tabla -->
             <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
                 <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Historial de Limpiezas UF</h3>
+                <div class="flex flex-wrap items-end gap-3 mb-3 text-sm">
+                    <div><label class="block font-semibold mb-1" for="uf_periodo">Consultar por</label><select id="uf_periodo" onchange="cambiarPeriodoUF()" class="border rounded p-2"><option value="ultimos7" selected>Últimos 7 días</option><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="rango">Entre fechas</option></select></div>
+                    <div id="uf_fecha_unica_wrap"><label class="block font-semibold mb-1" for="uf_fecha_consulta">Fecha de referencia</label><input id="uf_fecha_consulta" type="date" class="border rounded p-2"></div>
+                    <div id="uf_desde_wrap" class="hidden"><label class="block font-semibold mb-1" for="uf_desde">Desde</label><input id="uf_desde" type="date" class="border rounded p-2"></div>
+                    <div id="uf_hasta_wrap" class="hidden"><label class="block font-semibold mb-1" for="uf_hasta">Hasta</label><input id="uf_hasta" type="date" class="border rounded p-2"></div>
+                    <button onclick="aplicarFiltroUF()" class="bg-[#0b4f2f] text-white rounded px-4 py-2">Consultar</button>
+                    <button id="uf_modificar" onclick="modificarSeleccionUF()" disabled class="bg-amber-600 disabled:opacity-40 text-white rounded px-4 py-2">Modificar registro</button>
+                    <button id="uf_eliminar" onclick="eliminarSeleccionUF()" disabled class="bg-red-700 disabled:opacity-40 text-white rounded px-4 py-2">Eliminar registro</button>
+                </div>
+                <p id="uf_resumen" class="text-xs text-gray-500 mb-2" aria-live="polite"></p>
                 <div class="overflow-x-auto max-h-[500px]">
                     <table class="w-full text-left text-xs whitespace-nowrap">
                         <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
@@ -70,7 +80,7 @@
     <div id="modalUF" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div class="p-4 bg-[#0b3d2e] text-white rounded-t-xl flex justify-between items-center">
-                <h3 class="text-lg font-bold">🧪 Registrar Limpieza de Ultrafiltración (UF)</h3>
+                <h3 id="uf_titulo_modal" class="text-lg font-bold">🧪 Registrar Limpieza de Ultrafiltración (UF)</h3>
                 <button onclick="cerrarModalUF()" class="text-xl font-bold">&times;</button>
             </div>
             
@@ -159,90 +169,135 @@
 
             <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
                 <button onclick="cerrarModalUF()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
-                <button onclick="guardarLimpiezaUF()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Limpieza UF</button>
+                <button id="uf_guardar_btn" onclick="guardarLimpiezaUF()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Limpieza UF</button>
             </div>
         </div>
     </div>
 
     <script>
-        const hoyStr = new Date().toISOString().split('T')[0];
+        const camposUF = {fecha:'uf_fecha', equipo:'uf_equipo', operador:'uf_operador', tipo_limpieza:'uf_tipo', hora_inicio:'uf_h_inicio', hora_final:'uf_h_final', concentracion_1:'uf_conc1', concentracion_2:'uf_conc2', agua_inicial:'uf_agua_ini', agua_final:'uf_agua_fin', turbiedad:'uf_turbiedad', ph_final:'uf_ph', observaciones:'uf_obs'};
+        let registrosUF = [], seleccionUF = null, editandoUF = null;
+        function fechaLocalUF(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+        const hoyStr = fechaLocalUF();
         document.getElementById('uf_fecha').value = hoyStr;
-
-        function abrirModalUF() {
-            document.getElementById('modalUF').classList.remove('hidden');
-            document.getElementById('modalUF').classList.add('flex');
+        document.getElementById('uf_fecha_consulta').value = hoyStr;
+        document.getElementById('uf_desde').value = hoyStr;
+        document.getElementById('uf_hasta').value = hoyStr;
+        function cambiarPeriodoUF() {
+            const modo = document.getElementById('uf_periodo').value;
+            const rango = modo === 'rango';
+            document.getElementById('uf_fecha_unica_wrap').classList.toggle('hidden', rango || modo === 'ultimos7');
+            document.getElementById('uf_desde_wrap').classList.toggle('hidden', !rango);
+            document.getElementById('uf_hasta_wrap').classList.toggle('hidden', !rango);
         }
-
-        function cerrarModalUF() {
-            document.getElementById('modalUF').classList.add('hidden');
-            document.getElementById('modalUF').classList.remove('flex');
+        function limitesUF() {
+            const modo = document.getElementById('uf_periodo').value;
+            if (modo === 'rango') return [document.getElementById('uf_desde').value, document.getElementById('uf_hasta').value];
+            if (modo === 'ultimos7') { const d = new Date(); d.setDate(d.getDate()-6); return [fechaLocalUF(d), fechaLocalUF()]; }
+            const f = document.getElementById('uf_fecha_consulta').value;
+            if (!f) return ['', ''];
+            if (modo === 'dia') return [f,f];
+            const [y,m,d] = f.split('-').map(Number);
+            if (modo === 'mes') return [`${y}-${String(m).padStart(2,'0')}-01`,fechaLocalUF(new Date(y,m,0))];
+            const fecha = new Date(y,m-1,d), lunes = new Date(fecha);
+            lunes.setDate(fecha.getDate() - (fecha.getDay()+6)%7);
+            const domingo = new Date(lunes); domingo.setDate(lunes.getDate()+6);
+            return [fechaLocalUF(lunes),fechaLocalUF(domingo)];
         }
-
+        function aplicarFiltroUF() {
+            const [desde,hasta] = limitesUF();
+            if (!desde || !hasta || desde > hasta) { alert('Seleccione un rango de fechas válido.'); return; }
+            seleccionUF = null;
+            pintarTablaUF();
+        }
+        function valorUF(v) { return v == null ? '' : String(v); }
+        function numeroUF(v) {
+            if (v == null || v === '') return '';
+            const n = Number(String(v).replace(',','.'));
+            return Number.isFinite(n) ? String(Number(n.toFixed(4))) : String(v);
+        }
+        function celdaUF(tr, valor, clase='') {
+            const td = document.createElement('td'); td.className='p-2.5 border-b '+clase;
+            td.textContent = valorUF(valor); tr.appendChild(td);
+        }
+        function pintarTablaUF() {
+            const tbody = document.getElementById('body-tabla-uf'); tbody.replaceChildren();
+            const [desde,hasta] = limitesUF();
+            const filtrados = registrosUF.filter(r => String(r.fecha).slice(0,10)>=desde && String(r.fecha).slice(0,10)<=hasta);
+            document.getElementById('uf_resumen').textContent = `${filtrados.length} registro(s) del ${desde} al ${hasta}. Seleccione una fila para modificar o eliminar.`;
+            if (!filtrados.length) {
+                const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=14;
+                td.className='p-4 text-center text-gray-500 italic';td.textContent='No hay registros en el período seleccionado.';tr.appendChild(td);tbody.appendChild(tr);
+            }
+            for (const r of filtrados) {
+                const tr=document.createElement('tr');
+                tr.className='hover:bg-green-50 cursor-pointer '+(seleccionUF===r.id?'bg-green-100 ring-1 ring-green-700':'');
+                tr.tabIndex=0;tr.setAttribute('aria-selected',String(seleccionUF===r.id));
+                const seleccionar=()=>{seleccionUF=r.id;pintarTablaUF();};
+                tr.addEventListener('click',seleccionar);
+                tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();seleccionar();}});
+                for (const [campo,clase] of [['fecha','font-medium'],['equipo',''],['operador',''],['tipo_limpieza',''],['hora_inicio',''],['hora_final',''],['concentracion_1',''],['concentracion_2',''],['agua_inicial','font-mono'],['agua_final','font-mono'],['consumo_agua','font-mono font-bold text-[#0b4f2f]'],['turbiedad',''],['ph_final',''],['observaciones','']]) {
+                    celdaUF(tr, ['turbiedad','consumo_agua'].includes(campo)?numeroUF(r[campo]):r[campo],clase);
+                }
+                tbody.appendChild(tr);
+            }
+            const habilitado=filtrados.some(r=>r.id===seleccionUF);
+            document.getElementById('uf_modificar').disabled=!habilitado;
+            document.getElementById('uf_eliminar').disabled=!habilitado;
+        }
         async function cargarTablaUF() {
-            const res = await fetch('/api/limpieza-uf/registros');
-            const data = await res.json();
-            const tbody = document.getElementById('body-tabla-uf');
-            tbody.innerHTML = '';
-
-            if (!data.data || data.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="14" class="p-4 text-center text-gray-500 italic">No hay registros de limpiezas UF guardados.</td></tr>';
-                return;
-            }
-
-            data.data.forEach(item => {
-                tbody.innerHTML += `
-                    <tr class="hover:bg-gray-50">
-                        <td class="p-2.5 border-b font-medium">${item.fecha}</td>
-                        <td class="p-2.5 border-b">${item.equipo}</td>
-                        <td class="p-2.5 border-b">${item.operador}</td>
-                        <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
-                        <td class="p-2.5 border-b">${item.hora_inicio}</td>
-                        <td class="p-2.5 border-b">${item.hora_final}</td>
-                        <td class="p-2.5 border-b">${item.concentracion_1}</td>
-                        <td class="p-2.5 border-b">${item.concentracion_2}</td>
-                        <td class="p-2.5 border-b font-mono">${item.agua_inicial}</td>
-                        <td class="p-2.5 border-b font-mono">${item.agua_final}</td>
-                        <td class="p-2.5 border-b font-mono font-bold text-[#0b4f2f]">${item.consumo_agua}</td>
-                        <td class="p-2.5 border-b">${item.turbiedad}</td>
-                        <td class="p-2.5 border-b">${item.ph_final}</td>
-                        <td class="p-2.5 border-b">${item.observaciones}</td>
-                    </tr>
-                `;
-            });
+            try {
+                const res=await fetch('/api/limpieza-uf/registros');
+                if(!res.ok) throw new Error('Error HTTP '+res.status);
+                const data=await res.json(); registrosUF=Array.isArray(data.data)?data.data:[];
+                if(!registrosUF.some(r=>r.id===seleccionUF)) seleccionUF=null;
+                pintarTablaUF();
+            } catch(e) { document.getElementById('uf_resumen').textContent='No se pudieron cargar los registros: '+e.message; }
         }
-
+        function abrirModalUF() {
+            editandoUF=null;
+            for(const id of Object.values(camposUF)) { const el=document.getElementById(id);if(el.tagName==='SELECT')el.selectedIndex=0;else el.value=''; }
+            document.getElementById('uf_fecha').value=fechaLocalUF();
+            document.getElementById('uf_agua_ini').value='0';document.getElementById('uf_agua_fin').value='0';
+            document.getElementById('uf_titulo_modal').textContent='🧪 Registrar Limpieza de Ultrafiltración (UF)';
+            document.getElementById('uf_guardar_btn').textContent='Guardar Limpieza UF';
+            mostrarModalUF();
+        }
+        function mostrarModalUF(){document.getElementById('modalUF').classList.remove('hidden');document.getElementById('modalUF').classList.add('flex');}
+        function cerrarModalUF(){document.getElementById('modalUF').classList.add('hidden');document.getElementById('modalUF').classList.remove('flex');editandoUF=null;}
+        function modificarSeleccionUF() {
+            const r=registrosUF.find(x=>x.id===seleccionUF);if(!r)return;
+            editandoUF=r.id;
+            for(const [campo,id] of Object.entries(camposUF)) document.getElementById(id).value=valorUF(r[campo]);
+            document.getElementById('uf_titulo_modal').textContent='✏️ Modificar Limpieza UF';
+            document.getElementById('uf_guardar_btn').textContent='Guardar cambios';
+            mostrarModalUF();
+        }
+        async function eliminarSeleccionUF() {
+            const r=registrosUF.find(x=>x.id===seleccionUF);if(!r)return;
+            if(!confirm(`¿Está seguro de eliminar definitivamente la limpieza UF del ${r.fecha}, equipo ${r.equipo}, hora ${r.hora_inicio}? Esta acción no se puede deshacer.`))return;
+            try {
+                const res=await fetch('/api/limpieza-uf/eliminar/'+encodeURIComponent(r.id),{method:'DELETE'});
+                if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'No se pudo eliminar');}
+                seleccionUF=null;await cargarTablaUF();alert('Registro eliminado correctamente.');
+            }catch(e){alert('Error: '+e.message);}
+        }
         async function guardarLimpiezaUF() {
-            const payload = {
-                fecha: document.getElementById('uf_fecha').value,
-                equipo: document.getElementById('uf_equipo').value,
-                operador: document.getElementById('uf_operador').value,
-                tipo_limpieza: document.getElementById('uf_tipo').value,
-                hora_inicio: document.getElementById('uf_h_inicio').value,
-                hora_final: document.getElementById('uf_h_final').value,
-                concentracion_1: document.getElementById('uf_conc1').value,
-                concentracion_2: document.getElementById('uf_conc2').value,
-                agua_inicial: parseFloat(document.getElementById('uf_agua_ini').value) || 0,
-                agua_final: parseFloat(document.getElementById('uf_agua_fin').value) || 0,
-                turbiedad: document.getElementById('uf_turbiedad').value,
-                ph_final: document.getElementById('uf_ph').value,
-                observaciones: document.getElementById('uf_obs').value
-            };
-
-            const res = await fetch('/api/limpieza-uf/guardar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (res.ok) {
-                alert("¡Registro de Limpieza UF guardado con éxito y sincronizado con Excel!");
-                cerrarModalUF();
-                cargarTablaUF();
-            } else {
-                alert("Error al guardar el registro.");
+            const payload={};for(const [campo,id] of Object.entries(camposUF))payload[campo]=document.getElementById(id).value;
+            payload.agua_inicial=Number(payload.agua_inicial);payload.agua_final=Number(payload.agua_final);
+            if(!payload.fecha||!payload.equipo||!payload.operador||!payload.hora_inicio||!payload.hora_final||!Number.isFinite(payload.agua_inicial)||!Number.isFinite(payload.agua_final)){
+                alert('Complete los campos obligatorios y los contadores de agua.');return;
             }
+            if(payload.agua_final<payload.agua_inicial){alert('El contador final no puede ser menor al inicial.');return;}
+            const id=editandoUF,btn=document.getElementById('uf_guardar_btn');btn.disabled=true;
+            try {
+                const res=await fetch(id===null?'/api/limpieza-uf/guardar':'/api/limpieza-uf/actualizar/'+encodeURIComponent(id),{
+                    method:id===null?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+                if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(typeof e.detail==='string'?e.detail:'No se pudo guardar');}
+                cerrarModalUF();await cargarTablaUF();alert(id===null?'Limpieza UF guardada correctamente.':'Registro actualizado correctamente.');
+            }catch(e){alert('Error: '+e.message);}finally{btn.disabled=false;}
         }
-
+        cambiarPeriodoUF();
         cargarTablaUF();
     </script>
 <script>(function(){
