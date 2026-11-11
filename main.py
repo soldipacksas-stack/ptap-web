@@ -1003,7 +1003,6 @@ def saldos_quimicos(db: Session = Depends(get_db)):
 @app.get("/api/reportes/plan-calidad.pdf")
 def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depends(get_db)):
     """Formato en blanco: carta vertical, fecha seleccionada y NA por turno no programado."""
-    _clave_operacion(request)
     try:
         dia = date.fromisoformat(fecha)
     except (ValueError, TypeError):
