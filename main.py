@@ -1003,7 +1003,6 @@ def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depe
     """Formato diario similar a la matriz operacional: un parámetro por fila y tres turnos.
     Los valores ausentes permanecen en blanco; nunca se simulan resultados.
     """
-    _clave_operacion(request)
     try:
         date.fromisoformat(fecha)
     except ValueError:
