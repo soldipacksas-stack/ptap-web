@@ -1,7 +1,0 @@
-PTAP - Interfaz original restaurada
-
-La plantilla templates/plan_calidad.html se ha recuperado literalmente del ZIP original salvo la carga de un adaptador JS.
-Se conserva la matriz, estilos, navegación y modal original. El adaptador agrega estados, edición y eliminación junto a los filtros.
-Se conserva el backend V2 para validaciones y PostgreSQL.
-ATENCION: no se ha probado contra PostgreSQL de producción ni Render. Antes de desplegar, respaldar la base y verificar datos históricos, compatibilidad de límites y flujos de planes de acción.
-La tabla histórica original sigue teniendo limitaciones para períodos sin registros y la evaluación de programación por fecha; no se debe considerar completamente validada.

@@ -1,9 +1,0 @@
-PTAP - Unificación de navegación y formularios (06/11/2026)
-
-1. Menú lateral verde idéntico en todas las plantillas HTML, incluyendo CIP, Laboratorio, Inventario y Muestreo.
-2. Las pantallas de /operacion/* abren captura y edición en una ventana emergente, sin alterar las llamadas API ni las validaciones existentes.
-3. Conserva el módulo de impresión, la gráfica de barras de historial de esterilizaciones, la paleta verde y el importador.
-4. No se han ejecutado migraciones ni operaciones de escritura contra Supabase.
-5. Comprobación realizada: compilación Python, existencia de rutas y validación estructural básica.
-6. PENDIENTE DE PRUEBA: navegador real, Render y PostgreSQL de producción. No desplegar sin copia de seguridad y prueba en entorno separado.
-7. Este paquete NO constituye la finalización de todas las reglas operativas especializadas anteriormente solicitadas.
