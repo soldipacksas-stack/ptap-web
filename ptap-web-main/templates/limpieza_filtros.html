@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpieza de Filtros - PTAP ZFCCC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+/* Paleta institucional PTAP — visualizaciones y navegación */
+:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}
+</style><style id="ptap-unified-style">:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}aside.ptap-unified-side{background:#0B4934!important;color:white!important;overflow-y:auto!important;padding:18px 12px!important;min-width:220px}aside.ptap-unified-side.ptap-added{position:fixed;inset:0 auto 0 0;width:230px;z-index:100}.ptap-brand{color:white!important;font-size:20px!important;font-weight:750!important;margin:5px 9px 20px!important;padding-bottom:15px!important;border-bottom:1px solid #39705B!important;text-align:left!important}.ptap-nav{display:flex!important;flex-direction:column!important;gap:2px!important}.ptap-nav a{display:block!important;color:#e2f4e8!important;font:500 13px/1.3 Segoe UI,Arial,sans-serif!important;text-decoration:none!important;padding:10px 11px!important;border-radius:7px!important;background:transparent!important;margin:0!important;white-space:normal!important}.ptap-nav a:hover{background:#176047!important}.ptap-nav a.ptap-selected{background:#DCE9E3!important;color:#0B4934!important;font-weight:700!important}.ptap-offset-main{margin-left:230px!important;max-width:none!important;padding:24px!important}@media(max-width:760px){aside.ptap-unified-side.ptap-added{position:relative!important;width:100%!important;max-height:210px!important}.ptap-offset-main{margin-left:0!important;padding:12px!important}.ptap-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}</style></head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg">
+            <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
+            <nav class="space-y-2 font-medium text-sm">
+                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▥ Dashboard Gerencial</a>
+                <a href="/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Plan de Calidad</a>
+                <a href="/contadores" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Contadores 24h</a>
+                <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
+                <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
+                <a href="/filtros" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Limpieza Filtros</a>
+            <a href="/reportes/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▤ Impresión de formatos</a></nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-y-auto p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-[#0b4f2f]">Módulo: Limpieza de Filtros</h2>
+                <span class="text-xs bg-green-100 text-green-800 font-semibold px-3 py-1.5 rounded-lg border border-green-300">
+                    💡 Haz clic en cualquier tarjeta de filtro para registrar una limpieza
+                </span>
+            </div>
+
+            <!-- Panel de Registros e Historial -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
+                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Registros de Limpieza y Esterilización (Últimas 2 por filtro)</h3>
+                <div class="flex flex-wrap items-center gap-4 text-sm mb-4">
+                    <div>
+                        <label class="block font-bold mb-1">Fecha:</label>
+                        <input type="date" id="filtro_fecha" class="border rounded p-1.5 w-36">
+                    </div>
+                    <div>
+                        <label class="block font-bold mb-1">Filtro:</label>
+                        <select id="filtro_equipo" class="border rounded p-1.5 w-32">
+                            <option value="Todos">Todos</option>
+                            <option value="F121">F121</option>
+                            <option value="F122">F122</option>
+                            <option value="F123">F123</option>
+                            <option value="F221">F221</option>
+                            <option value="F222">F222</option>
+                            <option value="F223">F223</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end space-x-2 mt-5">
+                        <button onclick="cargarTablaFiltros()" class="bg-[#17803d] text-white px-3 py-1.5 rounded font-semibold">Filtrar</button>
+                        <button onclick="limpiarFiltrosTabla()" class="bg-[#6c757d] text-white px-3 py-1.5 rounded font-semibold">Limpiar</button>
+                    </div>
+                </div>
+
+                <!-- Tabla de datos -->
+                <div class="overflow-x-auto max-h-[250px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
+                            <tr>
+                                <th class="p-2.5">Fecha Fin</th>
+                                <th class="p-2.5">Equipo</th>
+                                <th class="p-2.5">Operador</th>
+                                <th class="p-2.5">Tipo Limpieza</th>
+                                <th class="p-2.5">H. Inicio (24h)</th>
+                                <th class="p-2.5">H. Final (24h)</th>
+                                <th class="p-2.5">Temp (°C)</th>
+                                <th class="p-2.5">Pérdida Carbón</th>
+                                <th class="p-2.5">Consumo (m³)</th>
+                                <th class="p-2.5 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="body-tabla-filtros" class="divide-y divide-gray-200">
+                            <tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros guardados todavía.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Sección de Tanques / Cronómetros de Esterilización (48 Horas) -->
+            <div class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6">
+                <h3 class="font-bold text-[#0b4f2f] mb-4">⏱️ Estado de Esterilización — Ciclo 48 horas (Formato 24h)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="grid-cronometros">
+                    <!-- Generado dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Gráfica única de intervalos entre esterilizaciones -->
+            <section class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6" aria-labelledby="tituloCiclos">
+              <h3 id="tituloCiclos" class="font-bold text-[#0B4934] mb-2">📊 Tiempo entre esterilizaciones por filtro</h3>
+              <p class="text-xs text-gray-500 mb-4">Cada barra representa las horas entre dos esterilizaciones consecutivas del mismo filtro. La línea roja marca el límite de 48 horas. Los retrolavados no se contabilizan.</p>
+              <div class="flex flex-wrap gap-3 mb-4 items-end">
+                <label class="text-sm">Período <select id="cicloPeriodo" class="block border rounded p-2 mt-1"><option value="semana">Semana</option><option value="mes" selected>Mes</option><option value="rango">Entre fechas</option></select></label>
+                <label class="text-sm">Desde <input id="cicloDesde" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Hasta <input id="cicloHasta" type="date" class="block border rounded p-2 mt-1"></label>
+                <label class="text-sm">Filtro <select id="cicloFiltro" class="block border rounded p-2 mt-1"><option value="">Todos los filtros</option><option>F121</option><option>F122</option><option>F123</option><option>F221</option><option>F222</option><option>F223</option></select></label>
+                <button type="button" id="cicloActualizar" class="bg-[#25846A] text-white rounded px-4 py-2">Actualizar</button>
+              </div>
+              <p id="cicloEstado" class="text-sm text-gray-600 mb-3" role="status"></p>
+              <div class="relative w-full" style="height:360px"><canvas id="graficaCiclos" aria-label="Horas entre esterilizaciones y límite de 48 horas"></canvas></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal para Registrar / Modificar Limpieza de Filtro -->
+    <div id="modalFiltros" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+                <h3 class="text-lg font-bold" id="modal-titulo">🛠️ Registrar Limpieza de Filtro</h3>
+                <button onclick="cerrarModalFiltros()" class="text-xl font-bold">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
+                <!-- Campo oculto para almacenar el ID en caso de modificación -->
+                <input type="hidden" id="form_registro_id" value="">
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Fecha de Finalización:</label>
+                        <input type="date" id="form_fecha" class="border rounded p-1.5 w-full">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Equipo / Filtro:</label>
+                        <select id="form_equipo" class="border rounded p-1.5 w-full bg-gray-100 font-bold text-[#0b4f2f]">
+                            <option value="F121">F121</option>
+                            <option value="F122">F122</option>
+                            <option value="F123">F123</option>
+                            <option value="F221">F221</option>
+                            <option value="F222">F222</option>
+                            <option value="F223">F223</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold">Operador:</label>
+                    <select id="form_operador" class="border rounded p-1.5 w-full">
+                        {% for op in operadores %}
+                        <option value="{{ op }}">{{ op }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Tipo de limpieza:</label>
+                        <select id="form_tipo" class="border rounded p-1.5 w-full" onchange="cambiarTipoLimpieza()">
+                            <option value="Esterilización">Esterilización</option>
+                            <option value="Retrolavado con parada">Retrolavado con parada</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold">Temperatura (°C) <span class="text-xs text-gray-500 font-normal">(Óptima: 85°C o N/A)</span>:</label>
+                        <input type="text" id="form_temperatura" class="border rounded p-1.5 w-full" value="85" placeholder="Ej: 85 o N/A">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Hora Inicio Esterilización (24h):</label>
+                        <input type="text" id="form_h_ini" class="border rounded p-1.5 w-full" placeholder="Ej: 22:00" value="22:00">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Hora Final Esterilización (24h):</label>
+                        <input type="text" id="form_h_fin" class="border rounded p-1.5 w-full" placeholder="Ej: 02:00" value="02:00">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Muestra Microbiología (Antes):</label>
+                        <input type="text" id="form_h_muestra_antes" class="border rounded p-1.5 w-full" placeholder="Ej: 21:30 o N/A" value="21:30">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Muestra Microbiología (Después):</label>
+                        <input type="text" id="form_h_muestra_despues" class="border rounded p-1.5 w-full" placeholder="Ej: 02:30 o N/A" value="02:30">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block font-bold">Contador Agua Inicial (m³):</label>
+                        <input type="number" id="form_agua_ini" class="border rounded p-1.5 w-full" value="0">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Contador Agua Final (m³):</label>
+                        <input type="number" id="form_agua_fin" class="border rounded p-1.5 w-full" value="0">
+                    </div>
+                    <div>
+                        <label class="block font-bold">¿Pérdida de Carbón?:</label>
+                        <select id="form_perdida_carbon" class="border rounded p-1.5 w-full font-bold">
+                            <option value="No">No</option>
+                            <option value="Sí">Sí</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block font-bold">Cloro:</label>
+                        <input type="text" id="form_cloro" class="border rounded p-1.5 w-full" placeholder="Ej: 0.10">
+                    </div>
+                    <div>
+                        <label class="block font-bold">Turbidez:</label>
+                        <input type="text" id="form_turbidez" class="border rounded p-1.5 w-full" placeholder="Ej: 0.20 NTU">
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                <button onclick="cerrarModalFiltros()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
+                <button onclick="enviarRegistroFiltro()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Registro</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const hoyStr = new Date().toISOString().split('T')[0];
+        document.getElementById('form_fecha').value = hoyStr;
+        document.getElementById('filtro_fecha').value = "";
+
+        let cronometrosData = [];
+        let chartInstancia = null;
+
+        // Función auxiliar para calcular el timestamp real de finalización considerando medianoche
+        function obtenerTimestampFin(reg) {
+            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return null;
+            let fechaFinStr = reg.fecha;
+            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
+                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
+                const [hFin] = reg.hora_final_est.split(':').map(Number);
+                if (hFin < hIni) {
+                    let d = new Date(reg.fecha + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    fechaFinStr = d.toISOString().split('T')[0];
+                }
+            }
+            return new Date(`${fechaFinStr}T${reg.hora_final_est}:00`).getTime();
+        }
+
+        // Función auxiliar para obtener la fecha y hora formateada correctamente
+        function obtenerFechaHoraFinFormateada(reg) {
+            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return { fecha: reg.fecha || '-', hora: '-' };
+            let fechaFinStr = reg.fecha;
+            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
+                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
+                const [hFin] = reg.hora_final_est.split(':').map(Number);
+                if (hFin < hIni) {
+                    let d = new Date(reg.fecha + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    fechaFinStr = d.toISOString().split('T')[0];
+                }
+            }
+            return { fecha: fechaFinStr, hora: reg.hora_final_est };
+        }
+
+        function cambiarTipoLimpieza() {
+            const tipo = document.getElementById('form_tipo').value;
+            if (tipo === "Retrolavado con parada") {
+                document.getElementById('form_temperatura').value = "N/A";
+                document.getElementById('form_h_ini').value = "N/A";
+                document.getElementById('form_h_fin').value = "N/A";
+                document.getElementById('form_h_muestra_antes').value = "N/A";
+                document.getElementById('form_h_muestra_despues').value = "N/A";
+            } else {
+                document.getElementById('form_temperatura').value = "85";
+                document.getElementById('form_h_ini').value = "22:00";
+                document.getElementById('form_h_fin').value = "02:00";
+                document.getElementById('form_h_muestra_antes').value = "21:30";
+                document.getElementById('form_h_muestra_despues').value = "02:30";
+            }
+        }
+
+        function abrirModalFiltrosPara(equipo) {
+            document.getElementById('form_registro_id').value = ""; // Nuevo registro
+            document.getElementById('form_equipo').value = equipo;
+            document.getElementById('modal-titulo').textContent = `🛠️ Registrar Limpieza para Filtro: ${equipo}`;
+            
+            limpiarFormularioModal();
+
+            document.getElementById('modalFiltros').classList.remove('hidden');
+            document.getElementById('modalFiltros').classList.add('flex');
+        }
+
+        function abrirModalModificar(item) {
+            document.getElementById('form_registro_id').value = item.id !== undefined ? item.id : '';
+            document.getElementById('form_equipo').value = item.equipo || 'F121';
+            document.getElementById('modal-titulo').textContent = `✏️ Modificar Registro de Limpieza: ${item.equipo}`;
+
+            document.getElementById('form_fecha').value = item.fecha || hoyStr;
+            document.getElementById('form_operador').value = item.operador || '';
+            document.getElementById('form_tipo').value = item.tipo_limpieza || 'Esterilización';
+            document.getElementById('form_temperatura').value = item.temperatura || '85';
+            document.getElementById('form_h_ini').value = item.hora_inicio_est || '22:00';
+            document.getElementById('form_h_fin').value = item.hora_final_est || '02:00';
+            document.getElementById('form_h_muestra_antes').value = item.hora_muestra_antes || '21:30';
+            document.getElementById('form_h_muestra_despues').value = item.hora_muestra_despues || '02:30';
+            document.getElementById('form_agua_ini').value = item.agua_inicial || 0;
+            document.getElementById('form_agua_fin').value = item.agua_final || 0;
+            document.getElementById('form_perdida_carbon').value = item.perdida_carbon || 'No';
+            document.getElementById('form_cloro').value = item.cloro || '';
+            document.getElementById('form_turbidez').value = item.turbidez || '';
+
+            document.getElementById('modalFiltros').classList.remove('hidden');
+            document.getElementById('modalFiltros').classList.add('flex');
+        }
+
+        function limpiarFormularioModal() {
+            document.getElementById('form_fecha').value = hoyStr;
+            document.getElementById('form_tipo').value = "Esterilización";
+            document.getElementById('form_temperatura').value = "85";
+            document.getElementById('form_h_ini').value = "22:00";
+            document.getElementById('form_h_fin').value = "02:00";
+            document.getElementById('form_h_muestra_antes').value = "21:30";
+            document.getElementById('form_h_muestra_despues').value = "02:30";
+            document.getElementById('form_agua_ini').value = "0";
+            document.getElementById('form_agua_fin').value = "0";
+            document.getElementById('form_perdida_carbon').value = "No";
+            document.getElementById('form_cloro').value = "";
+            document.getElementById('form_turbidez').value = "";
+        }
+
+        function cerrarModalFiltros() {
+            document.getElementById('modalFiltros').classList.add('hidden');
+            document.getElementById('modalFiltros').classList.remove('flex');
+            limpiarFormularioModal();
+        }
+
+        function limpiarFiltrosTabla() {
+            document.getElementById('filtro_fecha').value = "";
+            document.getElementById('filtro_equipo').value = "Todos";
+            cargarTablaFiltros();
+        }
+
+        async function cargarTablaFiltros() {
+            const res = await fetch('/api/filtros/registros');
+            const data = await res.json();
+            const tbody = document.getElementById('body-tabla-filtros');
+            tbody.innerHTML = '';
+
+            const fechaFiltro = document.getElementById('filtro_fecha').value;
+            const equipoFiltro = document.getElementById('filtro_equipo').value;
+
+            let filtrados = data.data.filter(item => {
+                const infoFin = obtenerFechaHoraFinFormateada(item);
+                let matchFecha = fechaFiltro ? (item.fecha.includes(fechaFiltro) || infoFin.fecha.includes(fechaFiltro)) : true;
+                let matchEquipo = equipoFiltro !== "Todos" ? item.equipo === equipoFiltro : true;
+                return matchFecha && matchEquipo;
+            });
+
+            if (!fechaFiltro && equipoFiltro === "Todos") {
+                const filtrosLista = ["F121", "F122", "F123", "F221", "F222", "F223"];
+                let ultimosDosPorFiltro = [];
+                filtrosLista.forEach(eq => {
+                    const regsEq = data.data
+                        .filter(r => r.equipo === eq)
+                        .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a))
+                        .slice(0, 2);
+                    ultimosDosPorFiltro.push(...regsEq);
+                });
+                filtrados = ultimosDosPorFiltro.sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
+            }
+
+            if (filtrados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros para este filtro.</td></tr>';
+            } else {
+                filtrados.forEach((item, index) => {
+                    const registroId = item.id !== undefined ? item.id : index; 
+                    const itemJson = JSON.stringify(item).replace(/"/g, '&quot;');
+                    const infoFin = obtenerFechaHoraFinFormateada(item);
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-2.5 border-b font-medium">${infoFin.fecha}</td>
+                            <td class="p-2.5 border-b font-bold text-[#0b4f2f]">${item.equipo}</td>
+                            <td class="p-2.5 border-b">${item.operador}</td>
+                            <td class="p-2.5 border-b">${item.tipo_limpieza}</td>
+                            <td class="p-2.5 border-b">${item.hora_inicio_est || '-'}</td>
+                            <td class="p-2.5 border-b">${infoFin.hora}</td>
+                            <td class="p-2.5 border-b font-semibold">${item.temperatura || '-'}</td>
+                            <td class="p-2.5 border-b text-center font-bold ${item.perdida_carbon === 'Sí' ? 'text-red-600' : 'text-green-700'}">${item.perdida_carbon || 'No'}</td>
+                            <td class="p-2.5 border-b font-mono">${item.consumo_agua || 0} m³</td>
+                            <td class="p-2.5 border-b text-center space-x-1 whitespace-nowrap">
+                                <button onclick="event.stopPropagation(); abrirModalModificar(${itemJson})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Modificar registro">
+                                    ✏️ Modificar
+                                </button>
+                                <button onclick="event.stopPropagation(); eliminarRegistro('${registroId}')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-semibold shadow" title="Eliminar registro">
+                                    🗑️ Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            cronometrosData = data.data;
+            renderizarCronometrosYTanques();
+            actualizarGraficaCiclos();
+        }
+
+        async function eliminarRegistro(id) {
+            if (!confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
+            try {
+                const res = await fetch(`/api/filtros/eliminar/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    alert("¡Registro eliminado con éxito!");
+                    cargarTablaFiltros();
+                } else {
+                    alert("Error al eliminar el registro.");
+                }
+            } catch (error) {
+                console.error("Error:", error);
+            }
+        }
+
+        function renderizarCronometrosYTanques() {
+            const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
+            const grid = document.getElementById('grid-cronometros');
+            grid.innerHTML = '';
+
+            filtros.forEach(eq => {
+                const regsEquipo = cronometrosData
+                    .filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
+                    .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
+
+                const regFiltro = regsEquipo.length > 0 ? regsEquipo[0] : null;
+                
+                let estadoHTML = '<span class="text-gray-400 font-bold">⚫ Sin registro previo</span>';
+                let ultimaHTML = '-';
+                let idCronometro = `crono-${eq}`;
+                let idTanque = `tanque-${eq}`;
+                let timestampFin = null;
+
+                if (regFiltro) {
+                    const infoFin = obtenerFechaHoraFinFormateada(regFiltro);
+                    ultimaHTML = `${infoFin.fecha} ${infoFin.hora} (24h)`;
+                    estadoHTML = '<span class="text-green-700 font-bold">🟢 Ciclo activo (48h)</span>';
+
+                    const fechaHoraFinMs = obtenerTimestampFin(regFiltro);
+                    timestampFin = fechaHoraFinMs + (48 * 60 * 60 * 1000);
+                }
+
+                grid.innerHTML += `
+                    <div onclick="abrirModalFiltrosPara('${eq}')" class="bg-gray-50 border-2 border-dashed hover:border-[#17803d] rounded-xl p-4 flex items-center space-x-4 shadow-sm cursor-pointer transition hover:bg-green-50/40 relative group">
+                        <div class="w-16 h-20 bg-gray-200 rounded-b-lg border-2 border-[#0b4f2f] relative overflow-hidden flex flex-col justify-end shadow-inner">
+                            <div id="${idTanque}" class="w-full bg-[#17803d] transition-all duration-500" style="height: 0%;"></div>
+                            <div class="absolute inset-0 flex items-center justify-center font-bold text-[10px] text-white drop-shadow">
+                                ${eq}
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <h4 class="font-bold text-[#0b4f2f] text-base group-hover:underline">Filtro: ${eq} 🛠️</h4>
+                            <p class="text-xs my-0.5">${estadoHTML}</p>
+                            <p class="text-[11px] text-gray-500">📅 Última: ${ultimaHTML}</p>
+                            <p class="text-sm font-mono font-bold text-gray-800 mt-1" id="${idCronometro}" data-target="${timestampFin || ''}">48:00:00</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        setInterval(() => {
+            const filtros = ["F121", "F122", "F123", "F221", "F222", "F223"];
+            const ahora = new Date().getTime();
+
+            filtros.forEach(eq => {
+                const el = document.getElementById(`crono-${eq}`);
+                const tanqueEl = document.getElementById(`tanque-${eq}`);
+                if (!el) return;
+
+                const target = el.dataset.target;
+                if (!target) {
+                    if (tanqueEl) tanqueEl.style.height = '0%';
+                    return;
+                }
+
+                const targetTime = parseInt(target);
+                const inicioTime = targetTime - (48 * 60 * 60 * 1000);
+                const diferenciaMs = targetTime - ahora;
+
+                let transcurridoMs = ahora - inicioTime;
+                let porcentaje = 100 - ((transcurridoMs / (48 * 60 * 60 * 1000)) * 100);
+                if (porcentaje < 0) porcentaje = 0;
+                if (porcentaje > 100) porcentaje = 100;
+                if (tanqueEl) tanqueEl.style.height = `${porcentaje}%`;
+
+                if (diferenciaMs <= 0) {
+                    const excesoMs = Math.abs(diferenciaMs);
+                    const totalSegundos = Math.floor(excesoMs / 1000);
+                    const h = String(Math.floor(totalSegundos / 3600)).padStart(2, '0');
+                    const m = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, '0');
+                    const s = String(totalSegundos % 60).padStart(2, '0');
+                    
+                    el.textContent = `+${h}:${m}:${s} VENCIDO`;
+                    el.className = "text-xs font-mono font-bold text-red-600 mt-1 animate-pulse";
+                    if(tanqueEl) tanqueEl.style.backgroundColor = '#dc2626';
+                } else {
+                    const totalSegundos = Math.floor(diferenciaMs / 1000);
+                    const h = String(Math.floor(totalSegundos / 3600)).padStart(2, '0');
+                    const m = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, '0');
+                    const s = String(totalSegundos % 60).padStart(2, '0');
+                    
+                    el.textContent = `${h}:${m}:${s}`;
+                    el.className = "text-sm font-mono font-bold text-gray-800 mt-1";
+                }
+            });
+        }, 1000);
+
+
+         function fechaLocalISO(d) {
+             return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+         }
+         function fechaFinEsterilizacion(r) {
+             if (!r || !r.fecha || !/^\d{2}:\d{2}/.test(r.hora_final_est || '')) return NaN;
+             const fecha = new Date(r.fecha + 'T' + r.hora_final_est.slice(0,5) + ':00');
+             if (!Number.isFinite(fecha.getTime())) return NaN;
+             // La fecha almacenada corresponde al día de inicio; si cruza medianoche, el fin es al día siguiente.
+             if (/^\d{2}:\d{2}/.test(r.hora_inicio_est || '') && r.hora_final_est.slice(0,5) < r.hora_inicio_est.slice(0,5)) fecha.setDate(fecha.getDate()+1);
+             return fecha.getTime();
+         }
+         function esEsterilizacion(r) {
+             return (r.tipo_limpieza || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes('esterilizacion');
+         }
+         function aplicarPeriodoCiclos() {
+             const tipo = document.getElementById('cicloPeriodo').value;
+             const desde = document.getElementById('cicloDesde');
+             const hasta = document.getElementById('cicloHasta');
+             if (tipo === 'rango') { desde.disabled = false; hasta.disabled = false; return; }
+             const hoy = new Date(), inicio = new Date(hoy);
+             if (tipo === 'semana') inicio.setDate(hoy.getDate() - ((hoy.getDay()+6)%7));
+             else inicio.setDate(1);
+             desde.value = fechaLocalISO(inicio);
+             hasta.value = fechaLocalISO(hoy);
+             desde.disabled = true; hasta.disabled = true;
+         }
+         function iniciarGraficaCiclos() {
+             document.getElementById('cicloPeriodo').addEventListener('change', () => { aplicarPeriodoCiclos(); actualizarGraficaCiclos(); });
+             ['cicloDesde','cicloHasta','cicloFiltro'].forEach(id => document.getElementById(id).addEventListener('change', actualizarGraficaCiclos));
+             document.getElementById('cicloActualizar').addEventListener('click', actualizarGraficaCiclos);
+             aplicarPeriodoCiclos();
+         }
+         function actualizarGraficaCiclos() {
+             const desde = document.getElementById('cicloDesde').value;
+             const hasta = document.getElementById('cicloHasta').value;
+             const seleccionado = document.getElementById('cicloFiltro').value;
+             const estado = document.getElementById('cicloEstado');
+             if (desde && hasta && desde > hasta) { estado.textContent = 'La fecha inicial no puede ser posterior a la final.'; if(chartInstancia){chartInstancia.destroy();chartInstancia=null;} return; }
+             const equipos = seleccionado ? [seleccionado] : ['F121','F122','F123','F221','F222','F223'];
+             const barras = [];
+             let totalEventos = 0, sinAnterior = 0;
+             equipos.forEach(equipo => {
+                 const eventos = cronometrosData.filter(r => r.equipo === equipo && esEsterilizacion(r))
+                     .map(r => ({ms:fechaFinEsterilizacion(r)})).filter(r => Number.isFinite(r.ms))
+                     .sort((a,b) => a.ms-b.ms);
+                 eventos.forEach((evento,i) => {
+                     const fecha = fechaLocalISO(new Date(evento.ms));
+                     if ((desde && fecha < desde) || (hasta && fecha > hasta)) return;
+                     totalEventos++;
+                     if (i === 0) { sinAnterior++; return; }
+                     const horas = (evento.ms-eventos[i-1].ms)/3600000;
+                     barras.push({equipo, fecha, ms:evento.ms, horas:Number(horas.toFixed(2))});
+                 });
+             });
+             barras.sort((a,b) => a.ms-b.ms || a.equipo.localeCompare(b.equipo));
+             const fuera = barras.filter(b => b.horas > 48).length;
+             estado.textContent = `Esterilizaciones en el período: ${totalEventos} · Intervalos calculados: ${barras.length} · Intervalos superiores a 48 h: ${fuera}` + (sinAnterior ? ` · ${sinAnterior} sin esterilización previa para comparar` : '');
+             if (chartInstancia) chartInstancia.destroy();
+             chartInstancia = new Chart(document.getElementById('graficaCiclos'), {
+                 type:'bar',
+                 data: {
+                     labels:barras.map(b => b.fecha.split('-').reverse().join('/') + (seleccionado ? '' : ' · '+b.equipo)),
+                     datasets:[
+                         {label:'Horas entre esterilizaciones',data:barras.map(b=>b.horas),backgroundColor:barras.map(b=>b.horas>48?'#C38A28':'#25846A'),borderRadius:4,maxBarThickness:55},
+                         {type:'line',label:'Límite 48 horas',data:barras.map(()=>48),borderColor:'#C34E4E',borderDash:[7,5],borderWidth:2,pointRadius:0,fill:false}
+                     ]
+                 },
+                 options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{
+                     tooltip:{callbacks:{title:items=>{const b=barras[items[0].dataIndex];return b?b.fecha+' · '+b.equipo:'';},label:item=>item.datasetIndex===0?'Intervalo: '+item.parsed.y+' horas':'Límite: 48 horas'}},
+                     legend:{position:'top'}
+                 },scales:{x:{title:{display:true,text:'Fecha de esterilización (y filtro)'},ticks:{maxRotation:60,minRotation:35,autoSkip:true},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Horas entre esterilizaciones'}}}}
+             });
+         }
+         document.addEventListener('DOMContentLoaded', iniciarGraficaCiclos);
+
+        async function enviarRegistroFiltro() {
+            const registroId = document.getElementById('form_registro_id').value;
+            const payload = {
+                fecha: document.getElementById('form_fecha').value,
+                equipo: document.getElementById('form_equipo').value,
+                operador: document.getElementById('form_operador').value,
+                tipo_limpieza: document.getElementById('form_tipo').value,
+                temperatura: document.getElementById('form_temperatura').value,
+                hora_inicio_est: document.getElementById('form_h_ini').value,
+                hora_final_est: document.getElementById('form_h_fin').value,
+                hora_muestra_antes: document.getElementById('form_h_muestra_antes').value,
+                hora_muestra_despues: document.getElementById('form_h_muestra_despues').value,
+                perdida_carbon: document.getElementById('form_perdida_carbon').value,
+                agua_inicial: parseFloat(document.getElementById('form_agua_ini').value) || 0,
+                agua_final: parseFloat(document.getElementById('form_agua_fin').value) || 0,
+                cloro: document.getElementById('form_cloro').value,
+                turbidez: document.getElementById('form_turbidez').value
+            };
+
+            let url = '/api/filtros/guardar';
+            let method = 'POST';
+            if (registroId) {
+                url = `/api/filtros/actualizar/${registroId}`;
+                method = 'PUT';
+            }
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                alert("¡Registro guardado con éxito!");
+                cerrarModalFiltros();
+                cargarTablaFiltros();
+            } else {
+                alert("Error al guardar el registro.");
+            }
+        }
+
+        // Cargar datos al iniciar la página
+        window.onload = () => {
+            cargarTablaFiltros();
+        };
+    </script>
+<script>(function(){
+ const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
+ const path=location.pathname;
+ nav.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('ptap-selected')});
+ const side=document.querySelector('aside');
+ if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
+ else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
+})();</script></body>
+</html>

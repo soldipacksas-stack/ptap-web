@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contadores 24h - PTAP ZFCCC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+<style>
+/* Paleta institucional PTAP — visualizaciones y navegación */
+:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}
+</style><style id="ptap-unified-style">:root{--ptap-verde:#0B4934;--ptap-verde-medio:#25846A;--ptap-petroleo:#397A89;--ptap-gris:#9AAAB0;--ptap-claro:#DCE9E3;--ptap-alerta:#C38A28;--ptap-error:#C34E4E}aside.ptap-unified-side{background:#0B4934!important;color:white!important;overflow-y:auto!important;padding:18px 12px!important;min-width:220px}aside.ptap-unified-side.ptap-added{position:fixed;inset:0 auto 0 0;width:230px;z-index:100}.ptap-brand{color:white!important;font-size:20px!important;font-weight:750!important;margin:5px 9px 20px!important;padding-bottom:15px!important;border-bottom:1px solid #39705B!important;text-align:left!important}.ptap-nav{display:flex!important;flex-direction:column!important;gap:2px!important}.ptap-nav a{display:block!important;color:#e2f4e8!important;font:500 13px/1.3 Segoe UI,Arial,sans-serif!important;text-decoration:none!important;padding:10px 11px!important;border-radius:7px!important;background:transparent!important;margin:0!important;white-space:normal!important}.ptap-nav a:hover{background:#176047!important}.ptap-nav a.ptap-selected{background:#DCE9E3!important;color:#0B4934!important;font-weight:700!important}.ptap-offset-main{margin-left:230px!important;max-width:none!important;padding:24px!important}@media(max-width:760px){aside.ptap-unified-side.ptap-added{position:relative!important;width:100%!important;max-height:210px!important}.ptap-offset-main{margin-left:0!important;padding:12px!important}.ptap-nav{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}}</style></head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 bg-[#0b3d2e] text-white flex flex-col p-4 shadow-lg">
+            <h1 class="text-xl font-bold border-b border-[#2c6e4b] pb-3 mb-4 text-center">PTAP ZFCCC</h1>
+            <nav class="space-y-2 font-medium text-sm">
+                <a href="/" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▥ Dashboard Gerencial</a>
+                <a href="/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Plan de Calidad</a>
+                <a href="/contadores" class="block px-3 py-2.5 rounded bg-[#cfe9d8] text-[#0b4f2f] font-bold">Contadores 24h</a>
+                <a href="/bitacora" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Bitácora</a>
+                <a href="/limpieza-uf" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza UF</a>
+                <a href="/filtros" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">Limpieza Filtros</a>
+            <a href="/reportes/plan-calidad" class="block px-3 py-2.5 rounded hover:bg-[#145c38] transition">▤ Impresión de formatos</a></nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-y-auto p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-[#0b4f2f]">Módulo: Contadores y Horómetros 24h</h2>
+                <button onclick="abrirModalContadores()" class="bg-[#17803d] hover:bg-[#0d5f2b] text-white px-4 py-2.5 rounded-lg font-semibold shadow">
+                    + Registrar Lecturas 24h
+                </button>
+            </div>
+
+            <!-- Panel de Filtros -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
+                <h3 class="font-bold text-[#0b4f2f] mb-2">📋 Tabla de Control y Verificación de Consumos</h3>
+                <div class="flex flex-wrap items-end gap-3 text-sm mb-3">
+                    <div><label class="block font-bold mb-1">Consultar por</label><select id="periodo_cont" class="border rounded p-2" onchange="cambiarPeriodoCont()"><option value="ultimos7">Últimos 7 días</option><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="rango">Entre fechas</option></select></div>
+                    <div id="fecha_cont_wrap"><label class="block font-bold mb-1">Fecha de referencia</label><input type="date" id="filtro_fecha" class="border rounded p-2"></div>
+                    <div id="desde_cont_wrap" class="hidden"><label class="block font-bold mb-1">Desde</label><input type="date" id="desde_cont" class="border rounded p-2"></div>
+                    <div id="hasta_cont_wrap" class="hidden"><label class="block font-bold mb-1">Hasta</label><input type="date" id="hasta_cont" class="border rounded p-2"></div>
+                    <button onclick="pintarContadores()" class="bg-[#17803d] text-white px-4 py-2 rounded font-semibold">Consultar</button>
+                    <button id="modificar_cont" onclick="modificarContador()" disabled class="bg-amber-600 disabled:opacity-40 text-white px-4 py-2 rounded font-semibold">Modificar registro</button>
+                </div>
+                <p id="resumen_cont" class="text-xs text-gray-500 mb-2">Seleccione una fila para modificar.</p>
+
+                <!-- Tabla Matricial de Registros -->
+                <div class="overflow-x-auto max-h-[450px]">
+                    <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead id="head-tabla-contadores" class="bg-[#0b4f2f] text-white sticky top-0 uppercase font-semibold">
+                            <!-- Se llena dinámicamente -->
+                        </thead>
+                        <tbody id="body-tabla-contadores" class="divide-y divide-gray-200">
+                            <tr><td colspan="10" class="p-4 text-center text-gray-500 italic">No hay registros de contadores todavía.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <section class="bg-white p-4 rounded-lg shadow mb-6 border border-gray-200">
+                <h3 class="font-bold text-[#0b4f2f] mb-3">Consumo de agua por punto de medición</h3>
+                <div class="flex flex-wrap items-end gap-3 text-sm mb-3">
+                    <div><label class="block font-bold mb-1">Punto de medición</label><select id="punto_cont" class="border rounded p-2" onchange="pintarGraficaCont()"><option value="todos">Todos los puntos</option></select></div>
+                    <div><label class="block font-bold mb-1">Desde</label><input type="date" id="graf_desde_cont" class="border rounded p-2" onchange="pintarGraficaCont()"></div>
+                     <div><label class="block font-bold mb-1">Hasta</label><input type="date" id="graf_hasta_cont" class="border rounded p-2" onchange="pintarGraficaCont()"></div>
+                </div>
+                <p class="text-xs text-gray-500 mb-2">Consumo = lectura actual menos lectura anterior. Se excluyen niveles de tanques, diferencias negativas y días sin lectura anterior.</p>
+                <div class="relative" style="height:360px"><canvas id="grafica_cont"></canvas></div>
+                <p id="nota_grafica_cont" class="text-xs text-gray-500 mt-2"></p>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Registrar Contadores 24h (Consolidado) -->
+    <div id="modalContadores" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div class="p-4 bg-[#0b4f2f] text-white rounded-t-xl flex justify-between items-center">
+                <h3 id="titulo_modal_cont" class="text-lg font-bold">📊 Registro de Contadores y Horómetros (5:00 a.m.)</h3>
+                <button onclick="cerrarModalContadores()" class="text-xl font-bold">&times;</button>
+            </div>
+            
+            <div class="p-4 border-b bg-gray-50 flex flex-wrap gap-4 text-sm">
+                <div>
+                    <label class="block font-bold">Fecha:</label>
+                    <input type="date" id="form_fecha" class="border rounded p-1.5 w-36">
+                </div>
+                <div class="flex-1">
+                    <label class="block font-bold">Operador:</label>
+                    <select id="form_operador" class="border rounded p-1.5 w-full">
+                        {% for op in operadores %}
+                        <option value="{{ op }}" {% if 'SOLIS' in op %}selected{% endif %}>{{ op }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Contenedor dinámico de medidores y tanques -->
+            <div id="contenedor-medidores" class="p-6 overflow-y-auto space-y-4 flex-1 text-sm">
+                <!-- Se inyectan los inputs mediante JavaScript -->
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                <button onclick="cerrarModalContadores()" class="px-4 py-2 bg-gray-400 text-white rounded font-bold">Cancelar</button>
+                <button id="guardar_cont" onclick="enviarRegistroContadores()" class="px-5 py-2 bg-[#17803d] hover:bg-[#0d5f2b] text-white rounded font-bold">Guardar Registros 24h</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        const fechaLocalCont=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const hoyStr=fechaLocalCont();
+        let registrosCont=[],seleccionCont=null,editandoCont=null,graficaCont=null;
+        ['form_fecha','filtro_fecha','desde_cont','hasta_cont','graf_desde_cont','graf_hasta_cont'].forEach(id=>document.getElementById(id).value=hoyStr);
+
+        const listaMedidores = [
+            {nombre: "Medidor principal PTAP", tipo: "lectura"},
+            {nombre: "Nivel % TK 010", tipo: "nivel"},
+            {nombre: "Nivel % TK AWT", tipo: "nivel"},
+            {nombre: "Nivel % TK 220", tipo: "nivel"},
+            {nombre: "U.F 111", tipo: "lectura"},
+            {nombre: "U.F 112", tipo: "lectura"},
+            {nombre: "U.F 211", tipo: "lectura"},
+            {nombre: "U.F 212", tipo: "lectura"},
+            {nombre: "F 121", tipo: "lectura"},
+            {nombre: "F 122", tipo: "lectura"},
+            {nombre: "F 123", tipo: "lectura"},
+            {nombre: "F 221", tipo: "lectura"},
+            {nombre: "F 222", tipo: "lectura"},
+            {nombre: "F 223", tipo: "lectura"},
+            {nombre: "Medidor by-pass línea cervecera", tipo: "lectura"},
+            {nombre: "Medidor by-pass Ósmosis Inversa", tipo: "lectura"},
+            {nombre: "Medidor by-pass agua doméstica", tipo: "lectura"}
+        ];
+
+        function construirFormularioMedidores() {
+            const contenedor = document.getElementById('contenedor-medidores');
+            contenedor.innerHTML = '<h4 class="font-bold text-[#0b4f2f] border-b pb-1">--- LECTURAS A LAS 5:00 A.M. ---</h4>';
+
+            listaMedidores.forEach(item => {
+                const labelTxt = item.tipo === "nivel" ? `${item.nombre} (% nivel):` : `${item.nombre} (Lectura m³):`;
+                contenedor.innerHTML += `
+                    <div class="flex flex-col">
+                        <label class="text-xs font-semibold text-gray-700">${labelTxt}</label>
+                        <input type="number" step="0.01" data-nombre="${item.nombre}" data-tipo="${item.tipo}" class="input-medidor border rounded p-1.5 text-sm w-full" value="0">
+                    </div>
+                `;
+            });
+        }
+
+        function abrirModalContadores() {
+            editandoCont=null;
+            document.getElementById('titulo_modal_cont').textContent='📊 Registro de Contadores y Horómetros (5:00 a.m.)';
+            document.getElementById('guardar_cont').textContent='Guardar Registros 24h';
+            document.getElementById('form_fecha').value=fechaLocalCont();
+            construirFormularioMedidores();
+            mostrarModalCont();
+        }
+        function mostrarModalCont(){document.getElementById('modalContadores').classList.remove('hidden');document.getElementById('modalContadores').classList.add('flex');}
+        function cerrarModalContadores(){document.getElementById('modalContadores').classList.add('hidden');document.getElementById('modalContadores').classList.remove('flex');editandoCont=null;}
+        function cambiarPeriodoCont(){
+            const m=document.getElementById('periodo_cont').value;
+            document.getElementById('fecha_cont_wrap').classList.toggle('hidden',m==='rango'||m==='ultimos7');
+            document.getElementById('desde_cont_wrap').classList.toggle('hidden',m!=='rango');
+            document.getElementById('hasta_cont_wrap').classList.toggle('hidden',m!=='rango');
+            pintarContadores();
+        }
+        function limitesCont(){
+            const m=document.getElementById('periodo_cont').value,f=document.getElementById('filtro_fecha').value;
+            if(m==='rango')return [document.getElementById('desde_cont').value,document.getElementById('hasta_cont').value];
+            if(m==='ultimos7'){const d=new Date();d.setDate(d.getDate()-6);return [fechaLocalCont(d),fechaLocalCont()];}
+            if(!f)return ['',''];
+            if(m==='dia')return [f,f];
+            const [y,mo,day]=f.split('-').map(Number);
+            if(m==='mes')return [`${y}-${String(mo).padStart(2,'0')}-01`,fechaLocalCont(new Date(y,mo,0))];
+            const d=new Date(y,mo-1,day),lunes=new Date(d);lunes.setDate(d.getDate()-(d.getDay()+6)%7);
+            const domingo=new Date(lunes);domingo.setDate(lunes.getDate()+6);
+            return [fechaLocalCont(lunes),fechaLocalCont(domingo)];
+        }
+        const diaCont=r=>String(r.fecha||'').slice(0,10);
+        function pintarContadores(){
+            const [desde,hasta]=limitesCont(),thead=document.getElementById('head-tabla-contadores'),tbody=document.getElementById('body-tabla-contadores');
+            thead.replaceChildren();tbody.replaceChildren();
+            if(!desde||!hasta||desde>hasta){document.getElementById('resumen_cont').textContent='Seleccione un rango válido.';return;}
+            const filtrados=registrosCont.filter(r=>diaCont(r)>=desde&&diaCont(r)<=hasta);
+            const nombres=[...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{})))];
+            const hr=document.createElement('tr');
+            for(const nombre of ['Fecha','Operador',...nombres]){const th=document.createElement('th');th.className='p-2.5';th.textContent=nombre;hr.appendChild(th);}thead.appendChild(hr);
+            for(const r of filtrados){
+                const tr=document.createElement('tr');tr.className='cursor-pointer hover:bg-green-50 '+(seleccionCont===r.id?'bg-green-100':'');tr.tabIndex=0;
+                const sel=()=>{seleccionCont=r.id;pintarContadores();};tr.onclick=sel;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();sel();}};
+                for(const val of [diaCont(r),r.operador,...nombres.map(n=>r.lecturas?.[n]??'—')]){const td=document.createElement('td');td.className='p-2.5 border-b font-mono';td.textContent=String(val??'');tr.appendChild(td);}tbody.appendChild(tr);
+            }
+            if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=nombres.length+2;td.className='p-4 text-center text-gray-500';td.textContent='No hay registros en el período seleccionado.';tr.appendChild(td);tbody.appendChild(tr);}
+            document.getElementById('modificar_cont').disabled=!filtrados.some(r=>r.id!=null&&r.id===seleccionCont);
+            document.getElementById('resumen_cont').textContent=`${filtrados.length} registro(s) del ${desde} al ${hasta}. Seleccione una fila para modificar.`;
+            pintarGraficaCont();
+        }
+        async function cargarTablaContadores(){
+            try{const res=await fetch('/api/contadores/registros');if(!res.ok)throw new Error('HTTP '+res.status);
+                const data=await res.json();registrosCont=Array.isArray(data.data)?data.data:[];
+                if(!registrosCont.some(r=>r.id===seleccionCont))seleccionCont=null;
+                if(registrosCont.length&&!window.rangoGraficaContInicializado){
+                    const fechas=registrosCont.map(diaCont).filter(Boolean).sort();
+                    document.getElementById('graf_desde_cont').value=fechas[0];
+                    document.getElementById('graf_hasta_cont').value=fechas[fechas.length-1];
+                    window.rangoGraficaContInicializado=true;
+                }
+                const sel=document.getElementById('punto_cont'),actual=sel.value;
+                sel.replaceChildren(new Option('Todos los puntos','todos'));
+                const nombres=[...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{})))].filter(n=>!/^nivel\s*%/i.test(n));
+                nombres.forEach(n=>sel.add(new Option(n,n)));if(nombres.includes(actual))sel.value=actual;
+                pintarContadores();
+            }catch(e){document.getElementById('resumen_cont').textContent='Error al cargar: '+e.message;}
+        }
+        function seleccionarOperadorCont(valor){
+            const sel=document.getElementById('form_operador'),v=String(valor??'');
+            if(v&&!Array.from(sel.options).some(o=>o.value===v))sel.add(new Option(v+' (registro histórico)',v));
+            sel.value=v;
+        }
+        // Asociar claves históricas con campos actuales sin perder nombres originales.
+        function normalizarClaveCont(nombre){
+            return String(nombre??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+                .replace(/\bm(?:3|³)\b/g,'').replace(/[^a-z0-9]/g,'');
+        }
+        const aliasCont={
+            'Medidor principal PTAP':['Medidor principal PTAP m3','Medidor principal PTAP M3','Medidor principal PTAP (m³)'],
+            'Medidor by-pass línea cervecera':['Medidor by-pass línea cervecera a servicios','Medidor by-pass línea cervecera a Servicio','Medidor by-pass línea cervecera a Servicios'],
+            'Medidor by-pass Ósmosis Inversa':['Medidor by-pass Osmosis Inversa'],
+            'Medidor by-pass agua doméstica':['Medidor by-pass agua domestica']
+        };
+        function claveLecturaCont(lecturas,nombre){
+            if(Object.prototype.hasOwnProperty.call(lecturas,nombre))return nombre;
+            const claves=Object.keys(lecturas), candidatos=[nombre,...(aliasCont[nombre]||[])];
+            for(const candidato of candidatos){
+                const k=claves.find(x=>normalizarClaveCont(x)===normalizarClaveCont(candidato));
+                if(k!==undefined)return k;
+            }
+            // Evitar asignar automáticamente valores de medidores distintos.
+            return null;
+        }
+        let clavesEditadasCont=new Map(),lecturasOriginalesCont={};
+        function modificarContador(){
+            const r=registrosCont.find(x=>x.id===seleccionCont);if(!r)return;
+            editandoCont=r.id;construirFormularioMedidores();
+            lecturasOriginalesCont={...(r.lecturas||{})};clavesEditadasCont=new Map();
+            document.getElementById('form_fecha').value=diaCont(r);seleccionarOperadorCont(r.operador);
+            const faltantes=[];
+            document.querySelectorAll('.input-medidor').forEach(inp=>{
+                const clave=claveLecturaCont(lecturasOriginalesCont,inp.dataset.nombre);
+                if(clave!==null){inp.value=lecturasOriginalesCont[clave]??'';clavesEditadasCont.set(inp.dataset.nombre,clave);}
+                else{inp.value='';faltantes.push(inp.dataset.nombre);}
+            });
+            document.getElementById('titulo_modal_cont').textContent='✏️ Modificar registro de contadores 24h';
+            document.getElementById('guardar_cont').textContent='Guardar cambios';mostrarModalCont();
+            if(faltantes.length)console.warn('Lecturas sin coincidencia de clave:',faltantes);
+        }
+        function consumosCont(){
+            const orden=[...registrosCont].sort((a,b)=>diaCont(a).localeCompare(diaCont(b)));
+            const desde=document.getElementById('graf_desde_cont').value,hasta=document.getElementById('graf_hasta_cont').value,salida=[];
+            for(let i=1;i<orden.length;i++){
+                const prev=orden[i-1],act=orden[i],fecha=diaCont(act);
+                if(fecha<desde||fecha>hasta||fecha===diaCont(prev))continue;
+                const dias=Math.round((Date.parse(fecha+'T12:00:00Z')-Date.parse(diaCont(prev)+'T12:00:00Z'))/86400000);
+                if(dias!==1)continue;
+                for(const [p,v] of Object.entries(act.lecturas||{})){
+                    if(/^nivel\s*%/i.test(p))continue;
+                    const anterior=prev.lecturas?.[p];
+                    if(v==null||v===''||anterior==null||anterior==='')continue;
+                    const diferencia=Number(v)-Number(anterior);
+                    if(Number.isFinite(diferencia)&&diferencia>=0)salida.push({fecha,punto:p,consumo:diferencia});
+                }
+            }
+            return salida;
+        }
+        function pintarGraficaCont(){
+            const canvas=document.getElementById('grafica_cont');if(!canvas||typeof Chart==='undefined'){document.getElementById('nota_grafica_cont').textContent='No se pudo cargar el motor de gráficas.';return;}
+            const punto=document.getElementById('punto_cont').value;
+            const desde=document.getElementById('graf_desde_cont').value,hasta=document.getElementById('graf_hasta_cont').value;
+            if(!desde||!hasta||desde>hasta){document.getElementById('nota_grafica_cont').textContent='Seleccione un rango de fechas válido para la gráfica.';if(graficaCont){graficaCont.destroy();graficaCont=null;}return;}
+            const datos=consumosCont().filter(x=>punto==='todos'||x.punto===punto);
+            const sumas=new Map();for(const d of datos){const k=d.punto;sumas.set(k,(sumas.get(k)||0)+d.consumo);}
+            const etiquetas=[...sumas.keys()],valores=[...sumas.values()];
+            if(graficaCont)graficaCont.destroy();
+            graficaCont=new Chart(canvas,{type:'bar',data:{labels:etiquetas,datasets:[{label:'Consumo de agua (m³)',data:valores,backgroundColor:'#25846A',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Consumo (m³)'}},x:{ticks:{autoSkip:false,maxRotation:65,minRotation:0}}}}});
+            document.getElementById('nota_grafica_cont').textContent=datos.length?`${datos.length} diferencias diarias válidas utilizadas.`:'No hay lecturas consecutivas suficientes para calcular consumos en este período.';
+        }
+        async function enviarRegistroContadores(){
+            const lecturas=editandoCont==null?{}:{...lecturasOriginalesCont};let valido=true;
+            document.querySelectorAll('.input-medidor').forEach(inp=>{
+                const nombre=inp.dataset.nombre,clave=editandoCont==null?nombre:(clavesEditadasCont.get(nombre)||nombre);
+                if(inp.value.trim()===''){if(editandoCont!=null&&!clavesEditadasCont.has(nombre))return;valido=false;return;}
+                if(!Number.isFinite(Number(inp.value))){valido=false;return;}lecturas[clave]=Number(inp.value);
+            });
+            const payload={fecha:document.getElementById('form_fecha').value,operador:document.getElementById('form_operador').value,lecturas};
+            if(!valido||!payload.fecha||!payload.operador){alert('Revise las lecturas, la fecha y el operador antes de guardar.');return;}
+            const id=editandoCont,btn=document.getElementById('guardar_cont');btn.disabled=true;
+            try{
+                const url=id==null?'/api/contadores/guardar':'/api/contadores/actualizar/'+encodeURIComponent(id);
+                const res=await fetch(url,{method:id==null?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+                if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(typeof err.detail==='string'?err.detail:'HTTP '+res.status);}
+                cerrarModalContadores();await cargarTablaContadores();alert(id==null?'Registro guardado correctamente.':'Registro actualizado correctamente.');
+            }catch(e){alert('No se guardaron los cambios: '+e.message+'\nSi aparece HTTP 404/405, es necesario implementar la ruta de actualización en el servidor.');}
+            finally{btn.disabled=false;}
+        }
+
+        cambiarPeriodoCont();
+        cargarTablaContadores();
+    </script>
+<script>(function(){
+ const nav = document.createElement('nav');nav.className='ptap-nav';nav.innerHTML='<a href="/" data-ptap-link="/">▥ Dashboard Gerencial</a><a href="/plan-calidad" data-ptap-link="/plan-calidad">◈ Plan de Calidad</a><a href="/filtros" data-ptap-link="/filtros">◉ Limpieza de Filtros</a><a href="/limpieza-uf" data-ptap-link="/limpieza-uf">◈ Limpieza UF</a><a href="/contadores" data-ptap-link="/contadores">▤ Contadores 24 h</a><a href="/planes-accion" data-ptap-link="/planes-accion">☷ Planes de Acción</a><a href="/bitacora" data-ptap-link="/bitacora">✎ Bitácora</a><a href="/operacion/laboratorio" data-ptap-link="/operacion/laboratorio">⚗ Verificación de Laboratorio</a><a href="/operacion/inventario" data-ptap-link="/operacion/inventario">▦ Inventario de Químicos</a><a href="/operacion/cip" data-ptap-link="/operacion/cip">◉ Registro CIP</a><a href="/operacion/muestreo-compuesto" data-ptap-link="/operacion/muestreo-compuesto">◈ Muestreo Compuesto</a><a href="/reportes/plan-calidad" data-ptap-link="/reportes/plan-calidad">▤ Impresión de Formatos</a><a href="/importar-registros" data-ptap-link="/importar-registros">⇧ Importar registros</a>';
+ const path=location.pathname;
+ nav.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===path)a.classList.add('ptap-selected')});
+ const side=document.querySelector('aside');
+ if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
+ else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
+})();</script></body>
+</html>

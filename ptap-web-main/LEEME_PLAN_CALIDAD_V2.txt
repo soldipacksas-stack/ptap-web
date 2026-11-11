@@ -1,0 +1,46 @@
+PTAP - PLAN DE CALIDAD V2 - ENTREGA DE CÓDIGO COMPLETO
+======================================================
+Esta carpeta contiene el proyecto completo recibido en ptap-web-main(2).zip,
+con los demás módulos conservados y la implementación nueva del Plan de Calidad.
+
+CAMBIOS:
+- plan_calidad_v2.py: nuevos endpoints de Plan de Calidad y tablas auxiliares PostgreSQL.
+- main.py: al final sustituye rutas API antiguas por las nuevas.
+- templates/plan_calidad.html: captura, modificación, eliminación, matriz, indicadores y filtros.
+- models.py, database.py y demás archivos: conservados sin cambios.
+
+IMPORTANTE ANTES DE DESPLEGAR EN RENDER:
+1. HACER BACKUP de PostgreSQL; no subir directamente a producción sin respaldo.
+2. Probar en una base de ensayo CLONADA, no con los datos originales.
+3. La nueva versión crea cinco tablas auxiliares si no existen: pc_maestra_versiones,
+   pc_maestra_parametros, pc_estados, pc_auditoria y pc_planes_vinculos.
+4. No altera ni elimina columnas de tablas antiguas; inicializa la matriz maestra
+   con una versión inicial 2000-01-01 tomada del código proporcionado.
+5. Revisar y validar los límites de la matriz maestra antes de uso operativo.
+6. Los registros históricos sin estado/justificación pueden aparecer como
+   sin estado; deben conciliarse. No se convierten automáticamente en NA.
+7. Si ya hay registros históricos parciales o duplicados en un turno, la edición
+   integral del turno puede bloquearse para evitar sobrescribir información.
+8. La restricción de unicidad se comprueba en la API, pero NO se ha aplicado un
+   índice único al esquema antiguo por riesgo de duplicados históricos. Antes
+   de producción, conciliar duplicados y crear el índice único en una migración
+   controlada. La protección concurrente todavía requiere ese índice.
+9. Las versiones futuras de la matriz tienen estructura en BD, pero no incluyen
+   interfaz administrativa para publicar nuevas versiones. Se requiere proceso
+   de aprobación/migración específico antes de cambiar la maestra.
+10. El módulo de impresión existente no ha sido adaptado a todos los nuevos
+    estados ni a las versiones de matriz; verificar reportes antes de usarlos.
+11. El historial de auditoría conserva modificaciones, pero el borrado definitivo
+    elimina las mediciones y estados; revisar políticas de conservación.
+12. La aplicación original incluye importación histórica: evitar importaciones
+    concurrentes hasta aplicar control global de duplicados.
+
+PRUEBAS LOCALES REALIZADAS (SQLite DE ENSAYO, NO POSTGRESQL/RENDER):
+- carga de maestra
+- guardado de 30 pendientes con justificación
+- bloqueo de guardado duplicado (409)
+- indicadores documental/ejecución
+- edición de lote
+- respuesta de vista HTML
+
+No se ha verificado el despliegue en Render ni la migración sobre PostgreSQL real.
