@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, UploadFile, File, Form, Header
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, FileResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -916,6 +916,8 @@ def _salida_operacional(r):
 
 @app.get("/operacion/{modulo}", response_class=HTMLResponse)
 def pagina_operacional(modulo: str, request: Request):
+    if modulo == "inventario":
+        return RedirectResponse(url="/inventario-quimicos", status_code=307)
     if modulo == "laboratorio":
         return templates.TemplateResponse(request, "verificacion_laboratorio.html", {"request":request,"operadores":OPERADORES_PTAP})
     if modulo not in MODULOS_COMPLEMENTARIOS:
@@ -1000,78 +1002,111 @@ def saldos_quimicos(db: Session = Depends(get_db)):
 
 @app.get("/api/reportes/plan-calidad.pdf")
 def reporte_diario_plan_calidad(fecha: str, request: Request, db: Session = Depends(get_db)):
-    """Formato diario similar a la matriz operacional: un parámetro por fila y tres turnos.
-    Los valores ausentes permanecen en blanco; nunca se simulan resultados.
-    """
+    """Formato en blanco: carta vertical, fecha seleccionada y NA por turno no programado."""
+    _clave_operacion(request)
     try:
-        date.fromisoformat(fecha)
-    except ValueError:
+        dia = date.fromisoformat(fecha)
+    except (ValueError, TypeError):
         raise HTTPException(status_code=422, detail="Fecha inválida")
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.units import mm
-    from xml.sax.saxutils import escape
-    registros = db.query(models.RegistroPlanCalidad).filter_by(fecha=fecha).all()
-    por_clave = {(r.zona, r.parametro, r.turno): r for r in registros}
-    output = io.BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=landscape(A4), rightMargin=9*mm,
-                            leftMargin=9*mm, topMargin=10*mm, bottomMargin=11*mm)
-    styles = getSampleStyleSheet()
-    normal = ParagraphStyle('CeldaPTAP', parent=styles['Normal'], fontSize=7, leading=9)
-    small = ParagraphStyle('PequenaPTAP', parent=styles['Normal'], fontSize=7, leading=9, alignment=TA_CENTER)
-    verde = colors.HexColor('#0B4934')
-    verde_claro = colors.HexColor('#DCE9E3')
-    gris = colors.HexColor('#9AAAB0')
-    def cell(x):
-        return Paragraph(escape(str(x or '')), normal)
-    def header_footer(canvas, doc):
-        canvas.saveState()
-        canvas.setStrokeColor(gris)
-        canvas.line(9*mm, 9*mm, 288*mm, 9*mm)
-        canvas.setFont('Helvetica', 7)
-        canvas.setFillColor(verde)
-        canvas.drawString(10*mm, 6*mm, 'PTAP | Control operacional | Documento generado desde registros PostgreSQL')
-        canvas.drawRightString(286*mm, 6*mm, f'Página {doc.page}')
-        canvas.restoreState()
-    story = [Paragraph('ZFC-GCA-FOR-003 | FORMATO CONTROL OPERACIONAL PTAP', styles['Title']),
-             Paragraph('Referencia visual: V5 · Fecha: ' + fecha + ' · Turnos 1, 2 y 3', styles['Normal']),
-             Spacer(1, 7)]
-    # El orden se toma de la maestra oficial del programa, no del orden de inserción.
-    grupos = defaultdict(list)
-    for zona, parametro, frecuencia, dia, turno_programado, limite, tipo in MAESTRA_PLAN_CALIDAD:
-        grupos[zona].append((parametro, frecuencia, limite))
-    for zona, parametros in grupos.items():
-        story.append(Paragraph(escape(zona), styles['Heading3']))
-        data = [[cell('Punto / Parámetro'),cell('Frecuencia'),cell('Especificación'),
-                 cell('Turno 1'),cell('Turno 2'),cell('Turno 3')]]
-        for parametro, frecuencia, limite in parametros:
-            valores = []
-            for turno in ('Turno 1','Turno 2','Turno 3'):
-                r = por_clave.get((zona, parametro, turno))
-                valores.append(cell(r.valor if r else ''))
-            data.append([cell(parametro),cell(frecuencia),cell(limite),*valores])
-        table = Table(data, colWidths=[88*mm,35*mm,43*mm,35*mm,35*mm,35*mm],repeatRows=1,hAlign='LEFT')
-        table.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,0),verde),('TEXTCOLOR',(0,0),(-1,0),colors.white),
-            ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.white,colors.HexColor('#F3F7F5')]),
-            ('GRID',(0,0),(-1,-1),.25,gris),('VALIGN',(0,0),(-1,-1),'TOP'),
-            ('LEFTPADDING',(0,0),(-1,-1),5),('RIGHTPADDING',(0,0),(-1,-1),5),
-            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4)
-        ]))
-        # Los párrafos tienen color propio: establecer estilo de encabezado claro.
-        for c in data[0]: c.style = ParagraphStyle('CabeceraPTAP',parent=normal,textColor=colors.white,fontName='Helvetica-Bold')
-        story.extend([table,Spacer(1,9)])
-    story.append(Spacer(1,8))
-    firmas = Table([[cell('Responsable Turno 1: __________________'),cell('Responsable Turno 2: __________________'),cell('Responsable Turno 3: __________________')]],colWidths=[90*mm]*3)
-    story.append(firmas)
-    doc.build(story,onFirstPage=header_footer,onLaterPages=header_footer)
-    output.seek(0)
-    return StreamingResponse(output,media_type='application/pdf',headers={
-        'Content-Disposition':f'inline; filename="PTAP_control_operacional_{fecha}.pdf"',
-        'Cache-Control':'no-store'})
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.colors import HexColor
+    import re
+    from plan_calidad_v2 import parametros as parametros_vigentes, programado as esta_programado
+
+    # La versión histórica de la matriz determina la programación de la fecha.
+    _, parametros = parametros_vigentes(db, fecha)
+    programados = [p for p in parametros if any(esta_programado(p, fecha, t) for t in ('Turno 1', 'Turno 2', 'Turno 3'))]
+    if not programados:
+        raise HTTPException(status_code=422, detail="No hay análisis programados para la fecha seleccionada")
+
+    # Las muestras numeradas del mismo parámetro comparten una fila con celdas separadas.
+    grupos = []
+    indice = {}
+    for p in programados:
+        nombre = re.sub(r'\\s*\\(Muestra\\s*\\d+\\)\\s*$', '', p.parametro, flags=re.I).strip()
+        clave = (p.zona, nombre, p.limite)
+        if clave not in indice:
+            indice[clave] = len(grupos)
+            grupos.append([p.zona, nombre, p.limite, []])
+        grupos[indice[clave]][3].append(p)
+
+    salida = io.BytesIO()
+    pdf = canvas.Canvas(salida, pagesize=letter, pageCompression=1)
+    ancho, alto = letter
+    x0, x1, x2, x3, x4 = 22, 217, 371, 431, 612-22
+    # Tres columnas de turnos de idéntico ancho.
+    x_turnos = [431, 484, 537, 590]
+    verde = HexColor('#0B4934')
+    gris = HexColor('#8B9893')
+    pdf.setTitle(f'Control operacional PTAP - {fecha}')
+    pdf.setFont('Helvetica-Bold', 10)
+    pdf.setFillColor(verde)
+    pdf.drawCentredString(ancho/2, alto-25, 'CONTROL OPERACIONAL PTAP - FORMATO EN BLANCO')
+    pdf.setFont('Helvetica', 7)
+    pdf.drawCentredString(ancho/2, alto-37, f'Fecha: {dia.strftime("%d/%m/%Y")}  |  ZFC-GCA-FOR-003 V5  |  Turnos T1, T2 y T3')
+    y_top = alto-49
+    y_bottom = 38
+    encabezado = 17
+    # Mantener la impresión en una sola página, con un mínimo de altura por fila.
+    h = min(11.3, (y_top-y_bottom-encabezado-18)/len(grupos))
+    if h < 6.1:
+        raise HTTPException(status_code=422, detail='Demasiados análisis para una sola hoja carta legible')
+    # Anchos calibrados para carta vertical.
+    columnas = [22, 216, 371, 431, 484, 537, 590]
+    pdf.setFillColor(verde)
+    pdf.rect(columnas[0], y_top-encabezado, columnas[-1]-columnas[0], encabezado, fill=1, stroke=0)
+    pdf.setFillColor(HexColor('#FFFFFF'))
+    pdf.setFont('Helvetica-Bold', 6.1)
+    for texto, izq, der in [('Zona / punto',22,216),('Análisis',216,371),('Límite',371,431),('T1',431,484),('T2',484,537),('T3',537,590)]:
+        pdf.drawCentredString((izq+der)/2, y_top-11, texto)
+    y = y_top-encabezado
+    def texto_ajustado(txt, ancho_disp, tam=5.6):
+        txt=str(txt or '')
+        while tam > 4.2 and pdf.stringWidth(txt, 'Helvetica', tam)>ancho_disp: tam-=.2
+        if pdf.stringWidth(txt, 'Helvetica', tam)>ancho_disp:
+            while txt and pdf.stringWidth(txt+'…','Helvetica',tam)>ancho_disp:txt=txt[:-1]
+            txt+='…'
+        return txt,tam
+    for zona, nombre, limite, muestras in grupos:
+        bajo = y-h
+        pdf.setStrokeColor(gris)
+        pdf.setLineWidth(.27)
+        pdf.rect(columnas[0], bajo, columnas[-1]-columnas[0], h, fill=0, stroke=1)
+        for xx in columnas[1:-1]: pdf.line(xx, bajo, xx, y)
+        pdf.setFillColor(HexColor('#202B28'))
+        for valor, izquierda, derecha in [(zona,22,216),(nombre,216,371),(limite,371,431)]:
+            txt,tam=texto_ajustado(valor, derecha-izquierda-5)
+            pdf.setFont('Helvetica',tam)
+            pdf.drawString(izquierda+2.5,bajo+(h-tam)/2+1,txt)
+        for i,turno in enumerate(('Turno 1','Turno 2','Turno 3')):
+            left,right=x_turnos[i:i+2]
+            flags=[esta_programado(p,fecha,turno) for p in muestras]
+            if not any(flags):
+                pdf.setFont('Helvetica-Bold',6.1)
+                pdf.drawCentredString((left+right)/2,bajo+h/2-2,'NA')
+            else:
+                n=len(muestras)
+                for j in range(1,n):
+                    xx=left+(right-left)*j/n
+                    pdf.line(xx,bajo,xx,y)
+                # Si alguna muestra individual no está programada, marcar NA solo en su casilla.
+                for j,flag in enumerate(flags):
+                    if not flag:
+                        pdf.setFont('Helvetica-Bold',5.6)
+                        pdf.drawCentredString(left+(right-left)*(j+.5)/n,bajo+h/2-2,'NA')
+        y=bajo
+    pdf.setStrokeColor(gris)
+    pdf.setFillColor(HexColor('#202B28'))
+    pdf.setFont('Helvetica',6.3)
+    pdf.drawString(25,19,'Responsable T1: __________________')
+    pdf.drawString(225,19,'Responsable T2: __________________')
+    pdf.drawString(425,19,'Responsable T3: __________________')
+    pdf.save()
+    salida.seek(0)
+    return StreamingResponse(salida, media_type='application/pdf', headers={
+        'Content-Disposition': f'inline; filename="PTAP_control_operacional_{fecha}.pdf"',
+        'Cache-Control': 'no-store'})
 
 
 @app.get("/reportes/plan-calidad", response_class=HTMLResponse)
