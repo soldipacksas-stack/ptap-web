@@ -96,7 +96,7 @@
             <!-- Gráfica única de intervalos entre esterilizaciones -->
             <section class="bg-white p-5 rounded-lg shadow border border-gray-200 mb-6" aria-labelledby="tituloCiclos">
               <h3 id="tituloCiclos" class="font-bold text-[#0B4934] mb-2">📊 Tiempo entre esterilizaciones por filtro</h3>
-              <p class="text-xs text-gray-500 mb-4">Cada barra representa las horas entre dos esterilizaciones consecutivas del mismo filtro. La línea roja marca el límite de 48 horas. Los retrolavados no se contabilizan.</p>
+              <p class="text-xs text-gray-500 mb-4">Cada barra representa las horas desde el fin de una esterilización hasta el inicio de la siguiente del mismo filtro. La línea roja marca el límite de 48 horas. Los retrolavados no se contabilizan.</p>
               <div class="flex flex-wrap gap-3 mb-4 items-end">
                 <label class="text-sm">Período <select id="cicloPeriodo" class="block border rounded p-2 mt-1"><option value="semana">Semana</option><option value="mes" selected>Mes</option><option value="rango">Entre fechas</option></select></label>
                 <label class="text-sm">Desde <input id="cicloDesde" type="date" class="block border rounded p-2 mt-1"></label>
@@ -231,6 +231,14 @@
         let chartInstancia = null;
 
         // Única interpretación local de fecha/hora, también para cruces de medianoche.
+        // La fecha del registro corresponde al día de inicio de la esterilización.
+        // El intervalo de inactividad va del FIN anterior al INICIO siguiente.
+        function obtenerTimestampInicio(reg) {
+            if (!reg || !/^\d{4}-\d{2}-\d{2}$/.test(reg.fecha || '') ||
+                !/^\d{2}:\d{2}(?::\d{2})?$/.test(reg.hora_inicio_est || '')) return NaN;
+            const inicio = new Date(`${reg.fecha}T${reg.hora_inicio_est.slice(0,5)}:00`);
+            return Number.isFinite(inicio.getTime()) ? inicio.getTime() : NaN;
+        }
         function obtenerTimestampFin(reg) {
             if (!reg || !/^\d{4}-\d{2}-\d{2}$/.test(reg.fecha || '') ||
                 !/^\d{2}:\d{2}(?::\d{2})?$/.test(reg.hora_final_est || '')) return NaN;
@@ -559,15 +567,18 @@
              let totalEventos = 0, sinAnterior = 0;
              equipos.forEach(equipo => {
                  const eventos = cronometrosData.filter(r => r.equipo === equipo && esEsterilizacion(r))
-                     .map(r => ({ms:fechaFinEsterilizacion(r)})).filter(r => Number.isFinite(r.ms))
-                     .sort((a,b) => a.ms-b.ms);
+                     .map(r => ({inicio:obtenerTimestampInicio(r), fin:fechaFinEsterilizacion(r)}))
+                     .filter(r => Number.isFinite(r.inicio) && Number.isFinite(r.fin) && r.fin >= r.inicio)
+                     .sort((a,b) => a.inicio-b.inicio);
                  eventos.forEach((evento,i) => {
-                     const fecha = fechaLocalISO(new Date(evento.ms));
+                     const fecha = fechaLocalISO(new Date(evento.inicio));
                      if ((desde && fecha < desde) || (hasta && fecha > hasta)) return;
                      totalEventos++;
                      if (i === 0) { sinAnterior++; return; }
-                     const horas = (evento.ms-eventos[i-1].ms)/3600000;
-                     barras.push({equipo, fecha, ms:evento.ms, horas:Number(horas.toFixed(2))});
+                     // No contar las horas de esterilización: FIN previo -> INICIO actual.
+                     const horas = (evento.inicio-eventos[i-1].fin)/3600000;
+                     if (horas < 0) return; // Registros solapados: no mostrar intervalos negativos.
+                     barras.push({equipo, fecha, ms:evento.inicio, horas:Number(horas.toFixed(2))});
                  });
              });
              barras.sort((a,b) => a.ms-b.ms || a.equipo.localeCompare(b.equipo));
@@ -586,7 +597,7 @@
                  options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{
                      tooltip:{callbacks:{title:items=>{const b=barras[items[0].dataIndex];return b?b.fecha+' · '+b.equipo:'';},label:item=>item.datasetIndex===0?'Intervalo: '+item.parsed.y+' horas':'Límite: 48 horas'}},
                      legend:{position:'top'}
-                 },scales:{x:{title:{display:true,text:'Fecha de esterilización (y filtro)'},ticks:{maxRotation:60,minRotation:35,autoSkip:true},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Horas entre esterilizaciones'}}}}
+                 },scales:{x:{title:{display:true,text:'Fecha de inicio de esterilización (y filtro)'},ticks:{maxRotation:60,minRotation:35,autoSkip:true},grid:{display:false}},y:{beginAtZero:true,title:{display:true,text:'Horas entre esterilizaciones'}}}}
              });
          }
          document.addEventListener('DOMContentLoaded', iniciarGraficaCiclos);
