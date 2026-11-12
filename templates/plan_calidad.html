@@ -1132,5 +1132,56 @@
  if(side){side.replaceChildren();const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';side.append(heading,nav);side.classList.add('ptap-unified-side');}
  else {const old=document.querySelector('body > header');if(old)old.remove();const aside=document.createElement('aside');aside.className='ptap-unified-side ptap-added';const heading=document.createElement('h1');heading.textContent='💧 PTAP ZFCCC';heading.className='ptap-brand';aside.append(heading,nav);document.body.prepend(aside);const main=document.querySelector('body > main');if(main)main.classList.add('ptap-offset-main');}
 })();</script><script src="/static/plan_calidad_compat.js"></script>
+
+<script id="ptap-navegacion-mediciones">
+// Navegación de captura: Tab, Enter e Intro numérico omiten los selectores de estado.
+(function () {
+    const modal = document.getElementById('modalForm');
+    if (!modal) return;
+    const contenedor = document.getElementById('contenedor-parametros');
+    if (!contenedor) return;
+
+    function camposMedicion() {
+        return Array.from(contenedor.querySelectorAll('.input-medida'))
+            .filter(el => !el.disabled && !el.readOnly && el.getClientRects().length > 0);
+    }
+
+    // El selector de estado no entra en el orden normal del tabulador.
+    // Se puede utilizar manualmente con el mouse.
+    function excluirEstadosDelTab() {
+        contenedor.querySelectorAll('.input-estado').forEach(el => {
+            el.tabIndex = -1;
+        });
+    }
+
+    new MutationObserver(excluirEstadosDelTab).observe(contenedor, {childList: true, subtree: true});
+    excluirEstadosDelTab();
+
+    modal.addEventListener('keydown', function (evento) {
+        const esTab = evento.key === 'Tab';
+        const esEnter = evento.key === 'Enter' || evento.code === 'NumpadEnter';
+        if (!esTab && !esEnter) return;
+        if (evento.ctrlKey || evento.altKey || evento.metaKey) return;
+
+        const actual = evento.target;
+        if (!(actual instanceof HTMLElement)) return;
+        // No interferir con observaciones, justificaciones o planes de acción.
+        if (actual.matches('textarea')) return;
+        if (!actual.matches('.input-medida')) return;
+
+        evento.preventDefault();
+        const campos = camposMedicion();
+        const indice = campos.indexOf(actual);
+        if (indice < 0) return;
+        const siguiente = indice + (esTab && evento.shiftKey ? -1 : 1);
+        if (siguiente >= 0 && siguiente < campos.length) {
+            campos[siguiente].focus();
+            if (campos[siguiente].matches('input[type="number"], input[type="text"]')) {
+                campos[siguiente].select();
+            }
+        }
+    }, true);
+})();
+</script>
 </body>
 </html>
