@@ -223,43 +223,29 @@
     </div>
 
     <script>
-        const hoyStr = new Date().toISOString().split('T')[0];
+        const hoyStr = fechaLocalISO(new Date());
         document.getElementById('form_fecha').value = hoyStr;
         document.getElementById('filtro_fecha').value = "";
 
         let cronometrosData = [];
         let chartInstancia = null;
 
-        // Función auxiliar para calcular el timestamp real de finalización considerando medianoche
+        // Única interpretación local de fecha/hora, también para cruces de medianoche.
         function obtenerTimestampFin(reg) {
-            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return null;
-            let fechaFinStr = reg.fecha;
-            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
-                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
-                const [hFin] = reg.hora_final_est.split(':').map(Number);
-                if (hFin < hIni) {
-                    let d = new Date(reg.fecha + 'T00:00:00');
-                    d.setDate(d.getDate() + 1);
-                    fechaFinStr = d.toISOString().split('T')[0];
-                }
+            if (!reg || !/^\d{4}-\d{2}-\d{2}$/.test(reg.fecha || '') ||
+                !/^\d{2}:\d{2}(?::\d{2})?$/.test(reg.hora_final_est || '')) return NaN;
+            const fin = new Date(`${reg.fecha}T${reg.hora_final_est.slice(0,5)}:00`);
+            if (!Number.isFinite(fin.getTime())) return NaN;
+            if (/^\d{2}:\d{2}/.test(reg.hora_inicio_est || '') &&
+                reg.hora_final_est.slice(0,5) < reg.hora_inicio_est.slice(0,5)) {
+                fin.setDate(fin.getDate() + 1);
             }
-            return new Date(`${fechaFinStr}T${reg.hora_final_est}:00`).getTime();
+            return fin.getTime();
         }
-
-        // Función auxiliar para obtener la fecha y hora formateada correctamente
         function obtenerFechaHoraFinFormateada(reg) {
-            if (!reg || !reg.fecha || !reg.hora_final_est || reg.hora_final_est === "N/A") return { fecha: reg.fecha || '-', hora: '-' };
-            let fechaFinStr = reg.fecha;
-            if (reg.hora_inicio_est && reg.hora_inicio_est !== "N/A") {
-                const [hIni] = reg.hora_inicio_est.split(':').map(Number);
-                const [hFin] = reg.hora_final_est.split(':').map(Number);
-                if (hFin < hIni) {
-                    let d = new Date(reg.fecha + 'T00:00:00');
-                    d.setDate(d.getDate() + 1);
-                    fechaFinStr = d.toISOString().split('T')[0];
-                }
-            }
-            return { fecha: fechaFinStr, hora: reg.hora_final_est };
+            const ms = obtenerTimestampFin(reg);
+            return { fecha: Number.isFinite(ms) ? fechaLocalISO(new Date(ms)) : (reg?.fecha || '-'),
+                     hora: Number.isFinite(ms) ? reg.hora_final_est : '-' };
         }
 
         function cambiarTipoLimpieza() {
@@ -340,9 +326,29 @@
             cargarTablaFiltros();
         }
 
+        let solicitudFiltros = 0;
         async function cargarTablaFiltros() {
-            const res = await fetch('/api/filtros/registros');
-            const data = await res.json();
+            const solicitud = ++solicitudFiltros;
+            const estado = document.getElementById('cicloEstado');
+            try {
+                const res = await fetch('/api/filtros/registros', { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!data || !Array.isArray(data.data)) throw new Error('Respuesta de registros inválida');
+                if (solicitud !== solicitudFiltros) return;
+                renderizarTablaFiltros(data);
+            } catch (error) {
+                if (solicitud !== solicitudFiltros) return;
+                console.error('No fue posible actualizar Limpieza de Filtros:', error);
+                estado.textContent = 'Error al consultar los registros. La gráfica no se ha actualizado; vuelve a intentar.';
+                document.getElementById('body-tabla-filtros').innerHTML =
+                    '<tr><td colspan="10" class="p-4 text-center text-red-600">Error al consultar registros. Intenta actualizar nuevamente.</td></tr>';
+                cronometrosData = [];
+                renderizarCronometrosYTanques();
+                if (chartInstancia) { chartInstancia.destroy(); chartInstancia = null; }
+            }
+        }
+        function renderizarTablaFiltros(data) {
             const tbody = document.getElementById('body-tabla-filtros');
             tbody.innerHTML = '';
 
@@ -428,7 +434,7 @@
 
             filtros.forEach(eq => {
                 const regsEquipo = cronometrosData
-                    .filter(r => r.equipo === eq && r.tipo_limpieza && r.tipo_limpieza.toLowerCase().includes("esterilización") && r.hora_final_est && r.hora_final_est !== "N/A")
+                    .filter(r => r.equipo === eq && esEsterilizacion(r) && r.hora_final_est && r.hora_final_est !== "N/A")
                     .sort((a, b) => obtenerTimestampFin(b) - obtenerTimestampFin(a));
 
                 const regFiltro = regsEquipo.length > 0 ? regsEquipo[0] : null;
@@ -519,12 +525,7 @@
              return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
          }
          function fechaFinEsterilizacion(r) {
-             if (!r || !r.fecha || !/^\d{2}:\d{2}/.test(r.hora_final_est || '')) return NaN;
-             const fecha = new Date(r.fecha + 'T' + r.hora_final_est.slice(0,5) + ':00');
-             if (!Number.isFinite(fecha.getTime())) return NaN;
-             // La fecha almacenada corresponde al día de inicio; si cruza medianoche, el fin es al día siguiente.
-             if (/^\d{2}:\d{2}/.test(r.hora_inicio_est || '') && r.hora_final_est.slice(0,5) < r.hora_inicio_est.slice(0,5)) fecha.setDate(fecha.getDate()+1);
-             return fecha.getTime();
+             return obtenerTimestampFin(r);
          }
          function esEsterilizacion(r) {
              return (r.tipo_limpieza || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes('esterilizacion');
@@ -544,7 +545,7 @@
          function iniciarGraficaCiclos() {
              document.getElementById('cicloPeriodo').addEventListener('change', () => { aplicarPeriodoCiclos(); actualizarGraficaCiclos(); });
              ['cicloDesde','cicloHasta','cicloFiltro'].forEach(id => document.getElementById(id).addEventListener('change', actualizarGraficaCiclos));
-             document.getElementById('cicloActualizar').addEventListener('click', actualizarGraficaCiclos);
+             document.getElementById('cicloActualizar').addEventListener('click', cargarTablaFiltros);
              aplicarPeriodoCiclos();
          }
          function actualizarGraficaCiclos() {
