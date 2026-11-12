@@ -1168,13 +1168,17 @@ def dashboard_cumplimiento(desde: str, hasta: str, turno: str = 'Todos',
                 if not pc.programado(p,fecha,t):continue
                 c['programados']+=1
                 encontrados=por_clave.get((fecha,t,p.zona,p.parametro),[])
-                if len(encontrados)>1:
-                    c['duplicados']+=1
-                    continue
                 if not encontrados:
                     c['sin_registrar']+=1
                     continue
-                r=encontrados[0]
+                if len(encontrados)>1:
+                    # Contabilizar UNA muestra programada por clave, sin descartar
+                    # todas las mediciones solo porque haya registros históricos
+                    # repetidos. Mantener la alerta para revisión manual.
+                    c['duplicados'] += 1
+                    # La última versión registrada tiene precedencia. No se borran
+                    # ni se alteran filas originales de PostgreSQL.
+                r=max(encontrados, key=lambda item: (item.creado_en or datetime.min, item.id))
                 estado=estados.get(r.id)
                 if not estado:
                     v=(r.valor or '').strip().upper()
