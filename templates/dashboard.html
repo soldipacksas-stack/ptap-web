@@ -43,36 +43,36 @@ function consumoEsterilizacion(r){
  const v=typeof bruto==='number'?bruto:Number(String(bruto).trim().replace(/\s/g,'').replace(/\./g,'').replace(',','.'));
  return Number.isFinite(v)&&v>=0?v:null;
 }
-function dibujarGraficoFiltro(canvasId,ids,series,fechas,umbrales){
+function dibujarGraficoFiltro(canvasId,ids,observaciones){
  const canvas=$(canvasId);if(!canvas)return;
  const idx=canvasId==='f-chart-1'?0:1;
  if(graficosFiltros[idx]){graficosFiltros[idx].destroy();graficosFiltros[idx]=null;}
  if(typeof Chart==='undefined')return;
+ // Cada categoría representa un evento, incluso cuando varios comparten fecha.
+ const ordenadas=observaciones.filter(x=>ids.includes(x.id)).sort((a,b)=>a.fecha.localeCompare(b.fecha)||a.hora.localeCompare(b.hora)||a.id.localeCompare(b.id));
  const colors=['#16805c','#287da5','#c28b12'];
- const datasets=ids.map((id,i)=>({label:id,data:fechas.map(f=>series[id].get(f)?.total??null),borderColor:colors[i],backgroundColor:colors[i],pointBackgroundColor:fechas.map(f=>series[id].get(f)?.alerta?'#b91c1c':colors[i]),pointBorderColor:fechas.map(f=>series[id].get(f)?.alerta?'#b91c1c':colors[i]),pointRadius:fechas.map(f=>series[id].get(f)?.alerta?7:4),pointHoverRadius:8,spanGaps:false,tension:.18}));
- graficosFiltros[idx]=new Chart(canvas,{type:'line',data:{labels:fechas.map(f=>f.slice(8,10)+'/'+f.slice(5,7)),datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>{const id=c.dataset.label,fecha=fechas[c.dataIndex],item=series[id].get(fecha);if(!item)return id+': Sin datos';return id+': '+fmt(item.total)+' m³ ('+item.cantidad+' esterilización(es)'+(item.alerta?', consumo excesivo detectado':'')+')';}}}},scales:{y:{beginAtZero:true,title:{display:true,text:'Consumo por fecha (m³)'}},x:{title:{display:true,text:'Fecha de esterilización'}}}}});
+ const datasets=ids.map((id,i)=>({label:id,data:ordenadas.map(x=>x.id===id?x.consumo:null),backgroundColor:ordenadas.map(x=>x.id===id&&x.alerta?'#b91c1c':colors[i]),borderColor:ordenadas.map(x=>x.id===id&&x.alerta?'#b91c1c':colors[i]),borderWidth:1,maxBarThickness:28}));
+ graficosFiltros[idx]=new Chart(canvas,{type:'bar',data:{labels:ordenadas.map(x=>x.fecha.slice(8,10)+'/'+x.fecha.slice(5,7)),datasets},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',intersect:true},plugins:{legend:{position:'bottom'},tooltip:{callbacks:{title:items=>{const x=ordenadas[items[0]?.dataIndex];return x?x.fecha+' · '+x.id+(x.hora?' · '+x.hora:''):'';},label:c=>{const x=ordenadas[c.dataIndex];return c.dataset.label+': '+fmt(x.consumo)+' m³ · promedio '+fmt(x.promedio)+' m³ · '+fmt(x.desviacion)+' %'+(x.alerta?' · EXCESIVO':'');}}}},scales:{y:{beginAtZero:true,title:{display:true,text:'Consumo por esterilización (m³)'}},x:{title:{display:true,text:'Fecha de esterilización'},ticks:{autoSkip:true,maxTicksLimit:14,maxRotation:45}}}}});
 }
 function renderConsumoFiltros(){
  const mes=$('f-mes')?.value;if(!mes)return;
  const eventos=(filtrosRaw||[]).filter(r=>filtroIds.includes(filtroId(r))&&estFin(r)&&fechaRegistro(r).startsWith(mes));
- const fechas=[...new Set(eventos.map(fechaRegistro))].sort();
- const series=Object.fromEntries(filtroIds.map(id=>[id,new Map()]));
+ const todas=[];
  const tbody=$('f-consumo-detalle');tbody.replaceChildren();let alertas=0,validos=0;
  for(const id of filtroIds){
   const ev=eventos.filter(r=>filtroId(r)===id);
-  const observaciones=ev.map(r=>({fecha:fechaRegistro(r),consumo:consumoEsterilizacion(r),registro:r})).filter(x=>x.consumo!==null);
+  const observaciones=ev.map(r=>({id,fecha:fechaRegistro(r),hora:String(r.hora_inicio_est||'').slice(0,5),consumo:consumoEsterilizacion(r)})).filter(x=>x.consumo!==null);
   validos+=observaciones.length;
   const promedio=observaciones.length?observaciones.reduce((a,b)=>a+b.consumo,0)/observaciones.length:null;
-  const excesos=promedio!==null&&promedio>0?observaciones.filter(x=>x.consumo>promedio*1.20):[];
-  alertas+=excesos.length;
-  for(const x of observaciones){const prev=series[id].get(x.fecha)||{total:0,cantidad:0,alerta:false};prev.total+=x.consumo;prev.cantidad++;prev.alerta ||= excesos.includes(x);series[id].set(x.fecha,prev);}
+  for(const x of observaciones){x.promedio=promedio;x.desviacion=promedio>0?(x.consumo/promedio-1)*100:0;x.alerta=promedio>0&&x.consumo>promedio*1.20;if(x.alerta)alertas++;todas.push(x);}
+  const excesos=observaciones.filter(x=>x.alerta);
   const tr=document.createElement('tr');
-  [id,String(ev.length),String(observaciones.length),promedio===null?'Sin datos':fmt(promedio),excesos.length?excesos.map(x=>x.fecha.slice(8,10)+'/'+x.fecha.slice(5,7)+' ('+fmt(x.consumo)+' m³, +'+fmt((x.consumo/promedio-1)*100)+' %)').join('; '):promedio===null?'Sin datos':'Sin alertas'].forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===4&&excesos.length)td.className='alert-day';tr.append(td)});
+  [id,String(ev.length),String(observaciones.length),promedio===null?'Sin datos':fmt(promedio),excesos.length?excesos.map(x=>x.fecha.slice(8,10)+'/'+x.fecha.slice(5,7)+(x.hora?' '+x.hora:'')+' ('+fmt(x.consumo)+' m³, +'+fmt(x.desviacion)+' %)').join('; '):promedio===null?'Sin datos':'Sin alertas'].forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===4&&excesos.length)td.className='alert-day';tr.append(td)});
   tbody.append(tr);
  }
- dibujarGraficoFiltro('f-chart-1',filtroIds.slice(0,3),series,fechas);
- dibujarGraficoFiltro('f-chart-2',filtroIds.slice(3),series,fechas);
- $('f-consumo-nota').textContent=`${eventos.length} esterilizaciones registradas en ${mes}; ${validos} eventos con consumo registrado; ${alertas} alertas superiores al 20 % del promedio mensual de su filtro. Cada evento cuenta por separado para el promedio. Si hay varias esterilizaciones en una fecha, la gráfica suma sus consumos para ese día y la tabla evalúa cada evento individualmente. Los registros sin consumo se excluyen del promedio.`;
+ dibujarGraficoFiltro('f-chart-1',filtroIds.slice(0,3),todas);
+ dibujarGraficoFiltro('f-chart-2',filtroIds.slice(3),todas);
+ $('f-consumo-nota').textContent=`${eventos.length} esterilizaciones registradas en ${mes}; ${validos} eventos con consumo registrado; ${alertas} alertas superiores al 20 % del promedio mensual del mismo filtro. Cada barra corresponde a una esterilización, incluso cuando hay varias el mismo día. Las barras rojas señalan consumos excesivos. Los registros sin consumo se excluyen del promedio.`;
 }
 function clavePrincipal(lecturas){
  const nombres=['Medidor principal PTAP','Medidor principal PTAP m3','Medidor principal PTAP M3','Medidor principal PTAP (m³)'];
