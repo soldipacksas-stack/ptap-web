@@ -270,9 +270,14 @@
     </div>
 
     <script>
-        const hoyStr = new Date().toISOString().split('T')[0];
+        // Fechas locales para evitar desplazamientos por zona horaria.
+        const fechaLocalISO = fecha => `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+        const hoy = new Date();
+        const hoyStr = fechaLocalISO(hoy);
+        const inicioTresDias = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 2);
 
-        document.getElementById('f_desde').value = hoyStr;
+        // Vista inicial: hoy y los dos días calendario anteriores.
+        document.getElementById('f_desde').value = fechaLocalISO(inicioTresDias);
         document.getElementById('f_hasta').value = hoyStr;
         document.getElementById('form_fecha').value = hoyStr;
         document.getElementById('admin_fecha').value = hoyStr;
