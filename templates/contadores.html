@@ -116,7 +116,7 @@
         ['form_fecha','filtro_fecha','desde_cont','hasta_cont','graf_desde_cont','graf_hasta_cont'].forEach(id=>document.getElementById(id).value=hoyStr);
 
         const listaMedidores = [
-            {nombre: "Medidor principal PTAP", tipo: "lectura"},
+            {nombre: "Medidor principal PTAP m3", tipo: "lectura"},
             {nombre: "Nivel % TK 010", tipo: "nivel"},
             {nombre: "Nivel % TK AWT", tipo: "nivel"},
             {nombre: "Nivel % TK 220", tipo: "nivel"},
@@ -130,9 +130,11 @@
             {nombre: "F 221", tipo: "lectura"},
             {nombre: "F 222", tipo: "lectura"},
             {nombre: "F 223", tipo: "lectura"},
-            {nombre: "Medidor by-pass línea cervecera", tipo: "lectura"},
-            {nombre: "Medidor by-pass Ósmosis Inversa", tipo: "lectura"},
-            {nombre: "Medidor by-pass agua doméstica", tipo: "lectura"}
+            {nombre: "Medidor by-pass línea cervecera a servicios.", tipo: "lectura"},
+            {nombre: "Medidor by-pass Osmosis Inversa", tipo: "lectura"},
+            {nombre: "Medidor entrada TK agua doméstica", tipo: "lectura"},
+            {nombre: "Medidor entrada agua Suavizador", tipo: "lectura"},
+            {nombre: "Medidor salida tanque agua doméstica", tipo: "lectura"}
         ];
 
         function construirFormularioMedidores() {
@@ -208,31 +210,64 @@
             return nombre;
         }
         function nombresVisiblesCont(){
-            return [...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{}).map(nombreCanonicoCont)))];
+            // Orden y denominaciones fijas del formato oficial.
+            return listaMedidores.map(x=>x.nombre);
+        }
+        function lecturaNumericaCont(lecturas,nombre){
+            const claves=Object.keys(lecturas||{}).filter(k=>nombreCanonicoCont(k)===nombre);
+            if(!claves.length)return null;
+            const valores=claves.map(k=>lecturas[k]).filter(v=>v!==null&&v!==''&&Number.isFinite(Number(v)));
+            if(!valores.length)return null;
+            // No calcular consumos con alias contradictorios del mismo registro.
+            if(new Set(valores.map(Number)).size>1)return null;
+            return Number(valores[0]);
         }
         function lecturaVisibleCont(lecturas,nombre){
             const claves=Object.keys(lecturas||{}).filter(k=>nombreCanonicoCont(k)===nombre);
             if(!claves.length)return '—';
-            // Ante valores distintos bajo alias equivalentes, no ocultar la discrepancia.
             const valores=[...new Set(claves.map(k=>String(lecturas[k]??'—')))];
             return valores.join(' / ');
+        }
+        function consumoDiarioCont(registro,nombre){
+            const fecha=diaCont(registro);
+            const anteriorFecha=new Date(fecha+'T12:00:00');
+            if(!Number.isFinite(+anteriorFecha))return '—';
+            anteriorFecha.setDate(anteriorFecha.getDate()-1);
+            const anteriores=registrosCont.filter(r=>diaCont(r)===fechaLocalCont(anteriorFecha));
+            // Una única lectura por día: los registros duplicados requieren revisión.
+            if(anteriores.length!==1||registrosCont.filter(r=>diaCont(r)===fecha).length!==1)return '—';
+            const actual=lecturaNumericaCont(registro.lecturas,nombre);
+            const previo=lecturaNumericaCont(anteriores[0].lecturas,nombre);
+            if(actual===null||previo===null||actual<previo)return '—';
+            return (Math.round((actual-previo)*100)/100).toLocaleString('es-CO',{maximumFractionDigits:2});
         }
         function pintarContadores(){
             const [desde,hasta]=limitesCont(),thead=document.getElementById('head-tabla-contadores'),tbody=document.getElementById('body-tabla-contadores');
             thead.replaceChildren();tbody.replaceChildren();
             if(!desde||!hasta||desde>hasta){document.getElementById('resumen_cont').textContent='Seleccione un rango válido.';return;}
             const filtrados=registrosCont.filter(r=>diaCont(r)>=desde&&diaCont(r)<=hasta);
-            const nombres=nombresVisiblesCont();
-            const hr=document.createElement('tr');
-            for(const nombre of ['Fecha','Operador',...nombres]){const th=document.createElement('th');th.className='p-2.5';th.textContent=nombre;hr.appendChild(th);}thead.appendChild(hr);
+            const hr=document.createElement('tr'),sub=document.createElement('tr');
+            for(const nombre of ['Fecha','Operador']){
+                const th=document.createElement('th');th.className='p-2.5 sticky top-0 bg-[#0b4f2f]';th.textContent=nombre;th.rowSpan=2;hr.append(th);
+            }
+            for(const item of listaMedidores){
+                const th=document.createElement('th');th.className='p-2.5 text-center border-l border-green-700';th.textContent=item.nombre;th.colSpan=item.tipo==='nivel'?1:2;hr.append(th);
+                const labels=item.tipo==='nivel'?['Lectura 5 am']:['Lectura 5 am','Total (m³/día)'];
+                for(const label of labels){const h=document.createElement('th');h.className='p-2 text-center border-l border-green-700';h.textContent=label;sub.append(h);}
+            }
+            thead.append(hr,sub);
             for(const r of filtrados){
                 const tr=document.createElement('tr');tr.className='cursor-pointer hover:bg-green-50 '+(seleccionCont===r.id?'bg-green-100':'');tr.tabIndex=0;
                 const sel=()=>{seleccionCont=r.id;pintarContadores();};tr.onclick=sel;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();sel();}};
-                for(const val of [diaCont(r),r.operador,...nombres.map(n=>lecturaVisibleCont(r.lecturas,n))]){const td=document.createElement('td');td.className='p-2.5 border-b font-mono';td.textContent=String(val??'');tr.appendChild(td);}tbody.appendChild(tr);
+                const vals=[diaCont(r),r.operador];
+                for(const item of listaMedidores){vals.push(lecturaVisibleCont(r.lecturas,item.nombre));if(item.tipo!=='nivel')vals.push(consumoDiarioCont(r,item.nombre));}
+                for(const val of vals){const td=document.createElement('td');td.className='p-2.5 border-b border-r font-mono text-center';td.textContent=String(val??'—');tr.append(td);}
+                tbody.append(tr);
             }
-            if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=nombres.length+2;td.className='p-4 text-center text-gray-500';td.textContent='No hay registros en el período seleccionado.';tr.appendChild(td);tbody.appendChild(tr);}
+            const columnas=2+listaMedidores.reduce((n,x)=>n+(x.tipo==='nivel'?1:2),0);
+            if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=columnas;td.className='p-4 text-center text-gray-500';td.textContent='No hay registros en el período seleccionado.';tr.append(td);tbody.append(tr);}
             document.getElementById('modificar_cont').disabled=!filtrados.some(r=>r.id!=null&&r.id===seleccionCont);
-            document.getElementById('resumen_cont').textContent=`${filtrados.length} registro(s) del ${desde} al ${hasta}. Seleccione una fila para modificar.`;
+            document.getElementById('resumen_cont').textContent=`${filtrados.length} registro(s) del ${desde} al ${hasta}. Consumo diario = lectura actual − lectura del día anterior. Seleccione una fila para modificar.`;
             pintarGraficaCont();
         }
         async function cargarTablaContadores(){
@@ -247,7 +282,7 @@
                 }
                 const sel=document.getElementById('punto_cont'),actual=sel.value;
                 sel.replaceChildren(new Option('Todos los puntos','todos'));
-                const nombres=nombresVisiblesCont().filter(n=>!/^nivel\s*%/i.test(n));
+                const nombres=listaMedidores.filter(x=>x.tipo!=='nivel').map(x=>x.nombre);
                 nombres.forEach(n=>sel.add(new Option(n,n)));if(nombres.includes(actual))sel.value=actual;
                 pintarContadores();
             }catch(e){document.getElementById('resumen_cont').textContent='Error al cargar: '+e.message;}
@@ -263,10 +298,12 @@
                 .replace(/\bm(?:3|³)\b/g,'').replace(/[^a-z0-9]/g,'');
         }
         const aliasCont={
-            'Medidor principal PTAP':['Medidor principal PTAP m3','Medidor principal PTAP M3','Medidor principal PTAP (m³)'],
-            'Medidor by-pass línea cervecera':['Medidor by-pass línea cervecera a servicios','Medidor by-pass línea cervecera a Servicio','Medidor by-pass línea cervecera a Servicios'],
-            'Medidor by-pass Ósmosis Inversa':['Medidor by-pass Osmosis Inversa'],
-            'Medidor by-pass agua doméstica':['Medidor by-pass agua domestica']
+            'Medidor principal PTAP m3':['Medidor principal PTAP','Medidor principal PTAP M3','Medidor principal PTAP (m³)'],
+            'Medidor by-pass línea cervecera a servicios.':['Medidor by-pass línea cervecera','Medidor by-pass línea cervecera a servicios','Medidor by-pass línea cervecera a Servicio','Medidor by-pass línea cervecera a Servicios'],
+            'Medidor by-pass Osmosis Inversa':['Medidor by-pass Ósmosis Inversa'],
+            'Medidor entrada TK agua doméstica':['Medidor entrada TK agua domestica'],
+            'Medidor entrada agua Suavizador':['Medidor entrada agua suavizador'],
+            'Medidor salida tanque agua doméstica':['Medidor salida tanque agua domestica']
         };
         function claveLecturaCont(lecturas,nombre){
             if(Object.prototype.hasOwnProperty.call(lecturas,nombre))return nombre;
@@ -295,22 +332,15 @@
             if(faltantes.length)console.warn('Lecturas sin coincidencia de clave:',faltantes);
         }
         function consumosCont(){
-            const orden=[...registrosCont].sort((a,b)=>diaCont(a).localeCompare(diaCont(b)));
             const desde=document.getElementById('graf_desde_cont').value,hasta=document.getElementById('graf_hasta_cont').value,salida=[];
-            for(let i=1;i<orden.length;i++){
-                const prev=orden[i-1],act=orden[i],fecha=diaCont(act);
-                if(fecha<desde||fecha>hasta||fecha===diaCont(prev))continue;
-                const dias=Math.round((Date.parse(fecha+'T12:00:00Z')-Date.parse(diaCont(prev)+'T12:00:00Z'))/86400000);
-                if(dias!==1)continue;
-                for(const [p,v] of Object.entries(act.lecturas||{})){
-                    if(/^nivel\s*%/i.test(p))continue;
-                    const canon=nombreCanonicoCont(p);
-                    if(Object.keys(act.lecturas||{}).find(k=>k!==p&&nombreCanonicoCont(k)===canon))continue;
-                    const claveAnterior=Object.keys(prev.lecturas||{}).find(k=>nombreCanonicoCont(k)===canon);
-                    const anterior=claveAnterior==null?undefined:prev.lecturas[claveAnterior];
-                    if(v==null||v===''||anterior==null||anterior==='')continue;
-                    const diferencia=Number(v)-Number(anterior);
-                    if(Number.isFinite(diferencia)&&diferencia>=0)salida.push({fecha,punto:canon,consumo:diferencia});
+            for(const r of registrosCont){
+                const fecha=diaCont(r);if(fecha<desde||fecha>hasta)continue;
+                for(const item of listaMedidores){
+                    if(item.tipo==='nivel')continue;
+                    const consumo=consumoDiarioCont(r,item.nombre);
+                    if(consumo==='—')continue;
+                    const valor=Number(consumo.replace(/\./g,'').replace(',','.'));
+                    if(Number.isFinite(valor))salida.push({fecha,punto:item.nombre,consumo:valor});
                 }
             }
             return salida;
