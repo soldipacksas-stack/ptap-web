@@ -150,6 +150,24 @@
             });
         }
 
+        // Enter/Intro y Tab avanzan al siguiente campo de lectura, sin guardar el formulario.
+        document.getElementById('contenedor-medidores').addEventListener('keydown', function(event) {
+            if (event.key !== 'Enter' && event.key !== 'Tab') return;
+            if (event.key === 'Tab' && event.shiftKey) return; // Shift+Tab retrocede normalmente.
+            const campos = Array.from(this.querySelectorAll('.input-medidor:not(:disabled)'));
+            const actual = campos.indexOf(event.target);
+            if (actual < 0) return;
+            if (event.key === 'Enter') event.preventDefault();
+            if (actual < campos.length - 1) {
+                if (event.key === 'Tab') event.preventDefault();
+                campos[actual + 1].focus();
+                campos[actual + 1].select();
+            } else if (event.key === 'Enter') {
+                // En el último campo no se guarda automáticamente.
+                event.target.blur();
+            }
+        });
+
         function abrirModalContadores() {
             editandoCont=null;
             document.getElementById('titulo_modal_cont').textContent='📊 Registro de Contadores y Horómetros (5:00 a.m.)';
@@ -180,18 +198,37 @@
             return [fechaLocalCont(lunes),fechaLocalCont(domingo)];
         }
         const diaCont=r=>String(r.fecha||'').slice(0,10);
+        // Identidad visual única de cada medidor, sin modificar las claves guardadas.
+        function nombreCanonicoCont(nombre){
+            const clave=normalizarClaveCont(nombre);
+            for(const item of listaMedidores){
+                const candidatos=[item.nombre,...(aliasCont[item.nombre]||[])];
+                if(candidatos.some(c=>normalizarClaveCont(c)===clave))return item.nombre;
+            }
+            return nombre;
+        }
+        function nombresVisiblesCont(){
+            return [...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{}).map(nombreCanonicoCont)))];
+        }
+        function lecturaVisibleCont(lecturas,nombre){
+            const claves=Object.keys(lecturas||{}).filter(k=>nombreCanonicoCont(k)===nombre);
+            if(!claves.length)return '—';
+            // Ante valores distintos bajo alias equivalentes, no ocultar la discrepancia.
+            const valores=[...new Set(claves.map(k=>String(lecturas[k]??'—')))];
+            return valores.join(' / ');
+        }
         function pintarContadores(){
             const [desde,hasta]=limitesCont(),thead=document.getElementById('head-tabla-contadores'),tbody=document.getElementById('body-tabla-contadores');
             thead.replaceChildren();tbody.replaceChildren();
             if(!desde||!hasta||desde>hasta){document.getElementById('resumen_cont').textContent='Seleccione un rango válido.';return;}
             const filtrados=registrosCont.filter(r=>diaCont(r)>=desde&&diaCont(r)<=hasta);
-            const nombres=[...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{})))];
+            const nombres=nombresVisiblesCont();
             const hr=document.createElement('tr');
             for(const nombre of ['Fecha','Operador',...nombres]){const th=document.createElement('th');th.className='p-2.5';th.textContent=nombre;hr.appendChild(th);}thead.appendChild(hr);
             for(const r of filtrados){
                 const tr=document.createElement('tr');tr.className='cursor-pointer hover:bg-green-50 '+(seleccionCont===r.id?'bg-green-100':'');tr.tabIndex=0;
                 const sel=()=>{seleccionCont=r.id;pintarContadores();};tr.onclick=sel;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();sel();}};
-                for(const val of [diaCont(r),r.operador,...nombres.map(n=>r.lecturas?.[n]??'—')]){const td=document.createElement('td');td.className='p-2.5 border-b font-mono';td.textContent=String(val??'');tr.appendChild(td);}tbody.appendChild(tr);
+                for(const val of [diaCont(r),r.operador,...nombres.map(n=>lecturaVisibleCont(r.lecturas,n))]){const td=document.createElement('td');td.className='p-2.5 border-b font-mono';td.textContent=String(val??'');tr.appendChild(td);}tbody.appendChild(tr);
             }
             if(!filtrados.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=nombres.length+2;td.className='p-4 text-center text-gray-500';td.textContent='No hay registros en el período seleccionado.';tr.appendChild(td);tbody.appendChild(tr);}
             document.getElementById('modificar_cont').disabled=!filtrados.some(r=>r.id!=null&&r.id===seleccionCont);
@@ -210,7 +247,7 @@
                 }
                 const sel=document.getElementById('punto_cont'),actual=sel.value;
                 sel.replaceChildren(new Option('Todos los puntos','todos'));
-                const nombres=[...new Set(registrosCont.flatMap(r=>Object.keys(r.lecturas||{})))].filter(n=>!/^nivel\s*%/i.test(n));
+                const nombres=nombresVisiblesCont().filter(n=>!/^nivel\s*%/i.test(n));
                 nombres.forEach(n=>sel.add(new Option(n,n)));if(nombres.includes(actual))sel.value=actual;
                 pintarContadores();
             }catch(e){document.getElementById('resumen_cont').textContent='Error al cargar: '+e.message;}
@@ -267,10 +304,13 @@
                 if(dias!==1)continue;
                 for(const [p,v] of Object.entries(act.lecturas||{})){
                     if(/^nivel\s*%/i.test(p))continue;
-                    const anterior=prev.lecturas?.[p];
+                    const canon=nombreCanonicoCont(p);
+                    if(Object.keys(act.lecturas||{}).find(k=>k!==p&&nombreCanonicoCont(k)===canon))continue;
+                    const claveAnterior=Object.keys(prev.lecturas||{}).find(k=>nombreCanonicoCont(k)===canon);
+                    const anterior=claveAnterior==null?undefined:prev.lecturas[claveAnterior];
                     if(v==null||v===''||anterior==null||anterior==='')continue;
                     const diferencia=Number(v)-Number(anterior);
-                    if(Number.isFinite(diferencia)&&diferencia>=0)salida.push({fecha,punto:p,consumo:diferencia});
+                    if(Number.isFinite(diferencia)&&diferencia>=0)salida.push({fecha,punto:canon,consumo:diferencia});
                 }
             }
             return salida;
@@ -297,6 +337,19 @@
             const payload={fecha:document.getElementById('form_fecha').value,operador:document.getElementById('form_operador').value,lecturas};
             if(!valido||!payload.fecha||!payload.operador){alert('Revise las lecturas, la fecha y el operador antes de guardar.');return;}
             const id=editandoCont,btn=document.getElementById('guardar_cont');btn.disabled=true;
+            // Consultar el servidor antes de crear: los datos locales pueden estar desactualizados.
+            if(id==null){
+                try{
+                    const respuesta=await fetch('/api/contadores/registros',{cache:'no-store'});
+                    if(!respuesta.ok)throw new Error('HTTP '+respuesta.status);
+                    const datos=await respuesta.json();
+                    const existentes=(Array.isArray(datos.data)?datos.data:[]).filter(r=>diaCont(r)===payload.fecha);
+                    if(existentes.length){
+                        alert(`Ya existen ${existentes.length} registro(s) para ${payload.fecha}. No se guardó otro. Cierre el formulario, seleccione el registro de esa fecha y use «Modificar registro».`);
+                        btn.disabled=false;return;
+                    }
+                }catch(e){alert('No se pudo verificar si la fecha ya existe. No se guardó para evitar duplicados: '+e.message);btn.disabled=false;return;}
+            }
             try{
                 const url=id==null?'/api/contadores/guardar':'/api/contadores/actualizar/'+encodeURIComponent(id);
                 const res=await fetch(url,{method:id==null?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
